@@ -148,6 +148,14 @@ spec:
 | `httpRoute.parentRefs` | `[]` | Gateway references (required when `httpRoute.enabled: true`) |
 | `httpRoute.hostnames` | `[]` | Hostnames to match |
 
+### Probes
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `startupProbe` | see values | Probe checked until first success; gives the webhook up to 60 s to start before liveness kicks in |
+| `livenessProbe` | see values | Active after startup probe succeeds |
+| `readinessProbe` | see values | Active after startup probe succeeds |
+
 ### Scheduling
 
 | Key | Default | Description |

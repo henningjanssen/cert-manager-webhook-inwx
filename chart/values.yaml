@@ -100,24 +100,37 @@ podDisruptionBudget:
   # -- Maximum number of unavailable pods. Mutually exclusive with minAvailable.
   # maxUnavailable: 1
 
+# -- Startup probe configuration.
+# Checked repeatedly until it succeeds, after which liveness and readiness
+# probes take over. Allows slow startup without killing the pod.
+# Max startup time = failureThreshold * periodSeconds = 60s.
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: 8443
+    scheme: HTTPS
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 12
+
 # -- Liveness probe configuration.
+# Only active after the startupProbe succeeds.
 livenessProbe:
   httpGet:
     path: /healthz
     port: 8443
     scheme: HTTPS
-  initialDelaySeconds: 5
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 3
 
 # -- Readiness probe configuration.
+# Only active after the startupProbe succeeds.
 readinessProbe:
   httpGet:
     path: /healthz
     port: 8443
     scheme: HTTPS
-  initialDelaySeconds: 5
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 3
