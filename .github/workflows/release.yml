@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write       # required for OIDC provenance attestation
+  attestations: write   # required for build provenance
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  docker:
+    name: Build and push Docker image
+    runs-on: ubuntu-latest
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  helm:
+    name: Package and publish Helm chart
+    runs-on: ubuntu-latest
+    needs: [docker]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Strip leading v from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Lint Helm chart
+        run: |
+          helm lint chart/
+          helm template cert-manager-webhook-inwx chart/ > /dev/null
+
+      - name: Package Helm chart
+        run: |
+          helm package chart/ \
+            --version "${{ steps.version.outputs.version }}" \
+            --app-version "${{ steps.version.outputs.version }}"
+
+      - name: Upload Helm chart as release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "*.tgz"
+
+      - name: Log in to GitHub Container Registry (OCI Helm)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            helm registry login ghcr.io \
+              --username "${{ github.actor }}" \
+              --password-stdin
+
+      - name: Push Helm chart to OCI registry
+        run: |
+          helm push \
+            "cert-manager-webhook-inwx-${{ steps.version.outputs.version }}.tgz" \
+            "oci://ghcr.io/${{ github.repository_owner }}/charts"
+
+      - name: Print OCI installation hint
+        run: |
+          echo "Chart published:"
+          echo "  oci://ghcr.io/${{ github.repository_owner }}/charts/cert-manager-webhook-inwx:${{ steps.version.outputs.version }}"
+          echo ""
+          echo "Docker image digest: ${{ needs.docker.outputs.image-digest }}"
+          echo ""
+          echo "Pin the image digest in values.yaml to make deployments fully reproducible:"
+          echo "  image:"
+          echo "    digest: ${{ needs.docker.outputs.image-digest }}"
+

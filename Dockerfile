@@ -1,0 +1,20 @@
+# Build stage
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /build
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY src/ ./src/
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s" \
+    -o webhook \
+    ./src/
+
+# Final stage
+FROM gcr.io/distroless/static:nonroot
+
+COPY --from=builder /build/webhook /webhook
+
+ENTRYPOINT ["/webhook"]

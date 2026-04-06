@@ -1,0 +1,18 @@
+apiVersion: v2
+name: cert-manager-webhook-inwx
+description: A cert-manager ACME DNS01 webhook solver for INWX
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - cert-manager
+  - webhook
+  - acme
+  - dns01
+  - inwx
+home: https://github.com/henningjanssen/cert-manager-webhook-inwx
+sources:
+  - https://github.com/henningjanssen/cert-manager-webhook-inwx
+maintainers:
+  - name: Henning Janßen
+    url: https://github.com/henningjanssen

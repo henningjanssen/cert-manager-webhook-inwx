@@ -1,0 +1,7 @@
+/vendor/
+/webhook
+*.exe
+*.test
+*.out
+docker/certs/
+bin/

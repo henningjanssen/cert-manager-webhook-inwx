@@ -1,0 +1,19 @@
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1alpha1.{{ .Values.groupName }}
+  labels:
+    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+  annotations:
+    # This annotation causes cert-manager to inject the CA bundle of the
+    # named Certificate into the APIService spec.caBundle field.
+    cert-manager.io/inject-ca-from: "{{ .Release.Namespace }}/{{ include "cert-manager-webhook-inwx.fullname" . }}-webhook-tls"
+spec:
+  group: {{ .Values.groupName }}
+  groupPriorityMinimum: 1000
+  versionPriority: 15
+  service:
+    name: {{ include "cert-manager-webhook-inwx.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+    port: 443
+  version: v1alpha1

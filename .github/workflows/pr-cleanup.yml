@@ -1,0 +1,79 @@
+name: PR Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Delete PR preview artifacts
+    runs-on: ubuntu-latest
+    # Only run for first-party PRs — fork PRs never produce artifacts (see pr-preview.yml).
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      # -------------------------------------------------------------------------
+      # Docker image — delete all versions whose tag starts with pr-<number>
+      # -------------------------------------------------------------------------
+      - name: Delete PR Docker image versions
+        id: delete-docker-sha
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ github.event.repository.name }}
+          package-type: container
+          package-version-pattern: "pr-${{ github.event.number }}-*"
+          # The exact tag pr-<number> (no sha suffix) has no pre-release qualifier,
+          # so we run a second pass for that tag.
+        continue-on-error: true
+
+      - name: Delete PR Docker image exact tag
+        id: delete-docker
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ github.event.repository.name }}
+          package-type: container
+          package-version-pattern: "pr-${{ github.event.number }}"
+        continue-on-error: true
+
+      # -------------------------------------------------------------------------
+      # Helm chart (OCI) — package name on GHCR is charts/<repo-name>
+      # -------------------------------------------------------------------------
+      - name: Delete PR Helm chart versions
+        id: delete-helm-sha
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: charts/${{ github.event.repository.name }}
+          package-type: container
+          package-version-pattern: "0.0.0-pr${{ github.event.number }}-*"
+        continue-on-error: true
+
+      - name: Delete PR Helm chart exact version
+        id: delete-helm
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: charts/${{ github.event.repository.name }}
+          package-type: container
+          package-version-pattern: "0.0.0-pr${{ github.event.number }}+*"
+        continue-on-error: true
+
+      - name: Cleanup summary
+        if: always()
+        run: |
+          echo "### PR #${{ github.event.number }} Preview Artifact Cleanup" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Step | Outcome |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Docker image deletion (sha tags) | ${{ steps.delete-docker-sha.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Docker image deletion (exact tag) | ${{ steps.delete-docker.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Helm chart deletion (sha versions) | ${{ steps.delete-helm-sha.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Helm chart deletion (exact version) | ${{ steps.delete-helm.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "Docker image deletion (sha tags): ${{ steps.delete-docker-sha.outcome }}"
+          echo "Docker image deletion (exact tag): ${{ steps.delete-docker.outcome }}"
+          echo "Helm chart deletion (sha versions): ${{ steps.delete-helm-sha.outcome }}"
+          echo "Helm chart deletion (exact version): ${{ steps.delete-helm.outcome }}"

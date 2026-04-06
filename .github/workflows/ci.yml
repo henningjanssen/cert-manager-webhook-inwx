@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  release:
+    types: [created]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify go.sum is up to date
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Run tests
+        run: go test -v -race -count=1 -coverprofile=coverage.out ./src/...
+
+      - name: Run govulncheck
+        continue-on-error: true
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./src/...
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.out
+          retention-days: 7
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify Dockerfile Go version matches go.mod
+        run: |
+          GOMOD_VERSION=$(grep '^go ' go.mod | awk '{print $2}' | cut -d. -f1,2)
+          DOCKERFILE_VERSION=$(grep 'FROM golang:' Dockerfile | head -1 | sed 's/FROM golang:\([0-9.]*\).*/\1/')
+          if [ "$GOMOD_VERSION" != "$DOCKERFILE_VERSION" ]; then
+            echo "Go version mismatch: go.mod=$GOMOD_VERSION Dockerfile=$DOCKERFILE_VERSION"
+            exit 1
+          fi
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          go-version-file: go.mod
+          args: --timeout=5m ./src/...

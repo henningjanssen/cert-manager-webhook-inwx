@@ -1,0 +1,74 @@
+---
+# Self-signed bootstrap issuer — used only to issue the CA certificate below.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}-selfsigned
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+
+---
+# CA certificate — the root of trust for the webhook's TLS certificate.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}-ca
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+spec:
+  isCA: true
+  commonName: {{ include "cert-manager-webhook-inwx.fullname" . }}-ca
+  secretName: {{ include "cert-manager-webhook-inwx.fullname" . }}-ca
+  privateKey:
+    algorithm: {{ .Values.pki.algorithm }}
+    size: {{ .Values.pki.size }}
+  issuerRef:
+    name: {{ include "cert-manager-webhook-inwx.fullname" . }}-selfsigned
+    kind: Issuer
+    group: cert-manager.io
+
+---
+# Issuer backed by the CA — used to sign the webhook server certificate.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}-ca
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+spec:
+  ca:
+    secretName: {{ include "cert-manager-webhook-inwx.fullname" . }}-ca
+
+---
+# TLS certificate presented by the webhook server.
+# The cert-manager.io/inject-ca-from annotation on the APIService makes
+# cert-manager automatically populate spec.caBundle with the issuing CA.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}-webhook-tls
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "cert-manager-webhook-inwx.fullname" . }}-webhook-tls
+  duration: {{ .Values.pki.duration }}
+  renewBefore: {{ .Values.pki.renewBefore }}
+  dnsNames:
+    - {{ include "cert-manager-webhook-inwx.fullname" . }}
+    - {{ include "cert-manager-webhook-inwx.fullname" . }}.{{ .Release.Namespace }}
+    - {{ include "cert-manager-webhook-inwx.fullname" . }}.{{ .Release.Namespace }}.svc
+    - {{ include "cert-manager-webhook-inwx.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+  privateKey:
+    algorithm: {{ .Values.pki.algorithm }}
+    size: {{ .Values.pki.size }}
+  issuerRef:
+    name: {{ include "cert-manager-webhook-inwx.fullname" . }}-ca
+    kind: Issuer
+    group: cert-manager.io
+

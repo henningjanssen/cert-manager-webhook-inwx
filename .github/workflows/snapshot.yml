@@ -1,0 +1,88 @@
+name: Snapshot
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    name: Build and push snapshot image + chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value={{ branch }}
+            type=sha,format=short,prefix={{ branch }}-
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Set snapshot chart version
+        id: version
+        # Use 0.0.0-<branch>+<short-sha> as the OCI chart version so it is
+        # always lower than any real release and is easily identifiable.
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          BRANCH="${GITHUB_REF_NAME}"
+          echo "version=0.0.0-${BRANCH}+${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "chart_name=cert-manager-webhook-inwx-0.0.0-${BRANCH}+${SHORT_SHA}.tgz" >> "$GITHUB_OUTPUT"
+
+      - name: Lint Helm chart
+        run: |
+          helm lint chart/
+          helm template cert-manager-webhook-inwx chart/ > /dev/null
+
+      - name: Package Helm chart
+        run: |
+          helm package chart/ \
+            --version "${{ steps.version.outputs.version }}" \
+            --app-version "${{ github.ref_name }}-${{ github.sha }}"
+
+      - name: Log in to GitHub Container Registry (OCI Helm)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            helm registry login ghcr.io \
+              --username "${{ github.actor }}" \
+              --password-stdin
+
+      - name: Push Helm chart to OCI registry
+        run: |
+          helm push \
+            "${{ steps.version.outputs.chart_name }}" \
+            "oci://ghcr.io/${{ github.repository_owner }}/charts"

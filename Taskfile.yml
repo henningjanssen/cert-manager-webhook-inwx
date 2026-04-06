@@ -1,0 +1,148 @@
+version: "3"
+
+vars:
+  IMAGE: ghcr.io/henningjanssen/cert-manager-webhook-inwx
+  CHART_DIR: chart
+  SRC_DIR: src
+
+tasks:
+
+  # ── Go ────────────────────────────────────────────────────────────────────
+
+  build:
+    desc: Compile the webhook binary
+    cmds:
+      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o bin/webhook ./{{.SRC_DIR}}/
+
+  test:
+    desc: Run tests with race detector and coverage
+    cmds:
+      - go test -v -race -count=1 -coverprofile=coverage.out ./{{.SRC_DIR}}/...
+
+  test:cover:
+    desc: Open HTML coverage report in browser
+    deps: [test]
+    cmds:
+      - go tool cover -html=coverage.out
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run --timeout=5m ./{{.SRC_DIR}}/...
+
+  tidy:
+    desc: Run go mod tidy and verify go.sum is clean
+    cmds:
+      - go mod tidy
+      - git diff --exit-code go.mod go.sum
+
+  vulncheck:
+    desc: Scan for known vulnerabilities with govulncheck
+    cmds:
+      - go install golang.org/x/vuln/cmd/govulncheck@latest
+      - govulncheck ./{{.SRC_DIR}}/...
+
+  # ── Docker ────────────────────────────────────────────────────────────────
+
+  docker:build:
+    desc: Build Docker image (tag defaults to 'dev')
+    vars:
+      TAG: '{{.TAG | default "dev"}}'
+    cmds:
+      - docker build -t {{.IMAGE}}:{{.TAG}} .
+
+  docker:push:
+    desc: Push Docker image (TAG is required)
+    requires:
+      vars: [TAG]
+    cmds:
+      - docker push {{.IMAGE}}:{{.TAG}}
+
+  docker:run:
+    desc: Run the webhook container locally (for smoke testing)
+    vars:
+      TAG: '{{.TAG | default "dev"}}'
+    cmds:
+      - docker run --rm -p 8443:8443 {{.IMAGE}}:{{.TAG}}
+
+  # ── Helm ─────────────────────────────────────────────────────────────────
+
+  helm:lint:
+    desc: Lint the Helm chart
+    cmds:
+      - helm lint {{.CHART_DIR}}/
+      - helm template cert-manager-webhook-inwx {{.CHART_DIR}}/ > /dev/null
+
+  helm:template:
+    desc: Render Helm templates to stdout (pass VALUES=my-values.yaml to override)
+    vars:
+      VALUES: '{{.VALUES | default ""}}'
+    cmds:
+      - |
+        helm template cert-manager-webhook-inwx {{.CHART_DIR}}/ \
+          {{if .VALUES}}--values {{.VALUES}}{{end}}
+
+  helm:package:
+    desc: Package the Helm chart into a .tgz
+    cmds:
+      - helm package {{.CHART_DIR}}/
+
+  helm:install:
+    desc: Install the chart into the current kubeconfig cluster (NAMESPACE defaults to cert-manager)
+    vars:
+      NAMESPACE: '{{.NAMESPACE | default "cert-manager"}}'
+      VALUES: '{{.VALUES | default ""}}'
+    cmds:
+      - |
+        helm upgrade --install cert-manager-webhook-inwx {{.CHART_DIR}}/ \
+          --namespace {{.NAMESPACE}} \
+          --create-namespace \
+          {{if .VALUES}}--values {{.VALUES}}{{end}}
+
+  helm:uninstall:
+    desc: Uninstall the chart from the cluster
+    vars:
+      NAMESPACE: '{{.NAMESPACE | default "cert-manager"}}'
+    cmds:
+      - helm uninstall cert-manager-webhook-inwx --namespace {{.NAMESPACE}}
+
+  helm:diff:
+    desc: Show diff between installed release and local chart (requires helm-diff plugin)
+    vars:
+      NAMESPACE: '{{.NAMESPACE | default "cert-manager"}}'
+      VALUES: '{{.VALUES | default ""}}'
+    cmds:
+      - |
+        helm diff upgrade cert-manager-webhook-inwx {{.CHART_DIR}}/ \
+          --namespace {{.NAMESPACE}} \
+          {{if .VALUES}}--values {{.VALUES}}{{end}}
+
+  # ── CI helpers ────────────────────────────────────────────────────────────
+
+  ci:
+    desc: Run the full local CI pipeline (tidy, lint, test, vulncheck, helm:lint)
+    cmds:
+      - task: tidy
+      - task: lint
+      - task: test
+      - task: vulncheck
+      - task: helm:lint
+
+  check:versions:
+    desc: Verify that the Go version in Dockerfile matches go.mod
+    cmds:
+      - |
+        GOMOD=$(grep '^go ' go.mod | awk '{print $2}' | cut -d. -f1,2)
+        DOCKERFILE=$(grep 'FROM golang:' Dockerfile | head -1 | sed 's/FROM golang:\([0-9.]*\).*/\1/')
+        if [ "$GOMOD" != "$DOCKERFILE" ]; then
+          echo "Version mismatch: go.mod=$GOMOD  Dockerfile=$DOCKERFILE"
+          exit 1
+        fi
+        echo "Go versions match: $GOMOD"
+
+  # ── Utilities ─────────────────────────────────────────────────────────────
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf bin/ coverage.out *.tgz

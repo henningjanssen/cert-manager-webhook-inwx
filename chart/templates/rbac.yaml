@@ -1,0 +1,93 @@
+---
+# ClusterRole: allow the webhook to manage flow-control resources,
+# required for Kubernetes API priority and fairness admission.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:flowcontrol-solver
+  labels:
+    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - "flowcontrol.apiserver.k8s.io"
+    resources:
+      - "prioritylevelconfigurations"
+      - "flowschemas"
+    verbs:
+      - "list"
+      - "watch"
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:flowcontrol-solver
+  labels:
+    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:flowcontrol-solver
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: {{ include "cert-manager-webhook-inwx.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+
+---
+# Role: allow the cert-manager controller to read this webhook's TLS secret
+# so it can call the aggregated API.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:secret-reader
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - "secrets"
+    resourceNames:
+      - {{ include "cert-manager-webhook-inwx.fullname" . }}-webhook-tls
+    verbs:
+      - "get"
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:secret-reader
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:secret-reader
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: {{ include "cert-manager-webhook-inwx.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+
+---
+# Grant cert-manager (in its own namespace) the right to call this webhook
+# via the aggregated API server.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:cert-manager-webhook-caller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:secret-reader
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: {{ .Values.certManager.serviceAccountName }}
+    namespace: {{ .Values.certManager.namespace }}

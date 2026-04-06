@@ -1,0 +1,29 @@
+cert-manager-webhook-inwx has been deployed successfully.
+
+To use this webhook as a DNS01 solver, create a Kubernetes secret with your
+INWX credentials in the same namespace as the webhook:
+
+  kubectl create secret generic inwx-credentials \
+    --namespace {{ .Release.Namespace }} \
+    --from-literal=username=<YOUR_INWX_USERNAME> \
+    --from-literal=password=<YOUR_INWX_PASSWORD>
+
+Then reference the solver in your Issuer or ClusterIssuer:
+
+  apiVersion: cert-manager.io/v1
+  kind: ClusterIssuer
+  metadata:
+    name: letsencrypt-inwx
+  spec:
+    acme:
+      server: https://acme-v02.api.letsencrypt.org/directory
+      email: user@example.com
+      privateKeySecretRef:
+        name: letsencrypt-account-key
+      solvers:
+        - dns01:
+            webhook:
+              groupName: {{ .Values.groupName }}
+              solverName: inwx
+              config:
+                secretName: inwx-credentials

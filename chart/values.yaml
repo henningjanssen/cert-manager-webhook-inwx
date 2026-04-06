@@ -1,0 +1,244 @@
+# -- The ACME group name used to register this webhook solver.
+# Must be a unique domain-style name, e.g. acme.yourdomain.com.
+groupName: acme.inwx.com
+
+image:
+  # -- Image repository.
+  repository: ghcr.io/henningjanssen/cert-manager-webhook-inwx
+  # -- Image tag. Defaults to .Chart.AppVersion when empty.
+  tag: ""
+  # -- Image digest (e.g. sha256:abc123…). When set, takes precedence over `image.tag`.
+  digest: ""
+  # -- Image pull policy. Use `Always` when `image.digest` is not set and tags are mutable.
+  pullPolicy: IfNotPresent
+
+# -- Secrets used to pull the webhook image from private registries.
+# Ref: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+imagePullSecrets: []
+# - name: my-registry-secret
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Whether to create a ServiceAccount for the webhook.
+  create: true
+  # -- Annotations to add to the ServiceAccount (e.g. for IRSA/Workload Identity).
+  annotations: {}
+  # -- Override the ServiceAccount name. Defaults to the fullname when empty.
+  name: ""
+
+# -- Annotations to add to the webhook Pod.
+podAnnotations: {}
+
+# -- Additional labels to add to the webhook Pod.
+podLabels: {}
+
+# -- Pod-level security context applied to every container in the Pod.
+# Ref: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container-level security context for the webhook container.
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+
+# -- Number of webhook pod replicas.
+replicaCount: 1
+
+# -- Deployment update strategy.
+# Ref: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+service:
+  # -- Service type.
+  type: ClusterIP
+  # -- Service port.
+  port: 443
+  # -- Annotations to add to the Service.
+  annotations: {}
+
+# -- Resource requests and limits for the webhook container.
+# Ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+resources:
+  limits:
+    cpu: 100m
+    memory: 64Mi
+  requests:
+    cpu: 10m
+    memory: 32Mi
+
+# -- Horizontal Pod Autoscaler configuration.
+# Ref: https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
+autoscaling:
+  # -- Enable the HPA. When true, `replicaCount` is ignored.
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  # -- Target average CPU utilisation (percent). Leave empty to disable.
+  targetCPUUtilizationPercentage: 80
+  # -- Target average memory utilisation (percent). Leave empty to disable.
+  targetMemoryUtilizationPercentage: ""
+
+# -- Pod Disruption Budget configuration.
+# Ref: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
+podDisruptionBudget:
+  # -- Enable the PDB.
+  enabled: false
+  # -- Minimum number of available pods. Mutually exclusive with maxUnavailable.
+  minAvailable: 1
+  # -- Maximum number of unavailable pods. Mutually exclusive with minAvailable.
+  # maxUnavailable: 1
+
+# -- Liveness probe configuration.
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8443
+    scheme: HTTPS
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# -- Readiness probe configuration.
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8443
+    scheme: HTTPS
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# -- Node selector for pod scheduling.
+nodeSelector: {}
+
+# -- Tolerations for pod scheduling.
+tolerations: []
+
+# -- Affinity rules for pod scheduling.
+affinity: {}
+
+# -- Topology spread constraints.
+# Ref: https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/
+topologySpreadConstraints: []
+
+# -- Priority class name for the webhook Pod.
+priorityClassName: ""
+
+# -- Graceful termination period in seconds.
+terminationGracePeriodSeconds: 30
+
+# -- Extra environment variables injected into the webhook container.
+extraEnv: []
+# - name: HTTP_PROXY
+#   value: http://proxy.example.com:3128
+
+# -- Extra volumes added to the Pod.
+extraVolumes: []
+# - name: my-config
+#   configMap:
+#     name: my-config
+
+# -- Extra volume mounts added to the webhook container.
+extraVolumeMounts: []
+# - name: my-config
+#   mountPath: /etc/my-config
+#   readOnly: true
+
+# -- cert-manager installation details, used to configure RBAC.
+certManager:
+  # -- Namespace where cert-manager is installed.
+  namespace: cert-manager
+  # -- Service account name used by the cert-manager controller.
+  serviceAccountName: cert-manager
+
+# -- PKI configuration for the webhook's TLS certificate chain.
+pki:
+  # -- Duration of the webhook TLS certificate.
+  duration: 8760h
+  # -- How long before expiry cert-manager renews the certificate.
+  renewBefore: 720h
+  # -- Key algorithm for the CA and TLS certificate (ECDSA or RSA).
+  algorithm: ECDSA
+  # -- Key size. 256 / 384 for ECDSA; 2048 / 4096 for RSA.
+  size: 256
+
+# -- Webhook log verbosity. 0 = errors only, 4 = debug.
+logLevel: 2
+
+# -- Prometheus metrics configuration.
+metrics:
+  # -- Expose a Prometheus metrics endpoint (/metrics) and a liveness endpoint
+  # (/healthz) on a dedicated HTTP port inside the webhook container.
+  enabled: false
+  # -- Port for the metrics HTTP server.
+  port: 8080
+  # -- ServiceMonitor resource for Prometheus Operator.
+  serviceMonitor:
+    # -- Create a ServiceMonitor resource (requires metrics.enabled and the
+    # Prometheus Operator CRDs to be installed).
+    enabled: false
+    # -- Scrape interval. Defaults to the Prometheus global scrapeInterval.
+    interval: 30s
+    # -- Scrape timeout. Defaults to the Prometheus global scrapeTimeout.
+    scrapeTimeout: 10s
+    # -- Extra labels to add to the ServiceMonitor so Prometheus can discover it.
+    labels: {}
+    # -- Extra annotations for the ServiceMonitor resource.
+    annotations: {}
+    # -- Honor the target's labels when there is a conflict with the server's labels.
+    honorLabels: false
+    # -- RelabelConfigs to apply to samples before scraping.
+    relabelings: []
+    # -- MetricRelabelConfigs to apply to samples after scraping.
+    metricRelabelings: []
+  # -- PodMonitor resource for Prometheus Operator.
+  podMonitor:
+    # -- Create a PodMonitor resource (requires metrics.enabled and the
+    # Prometheus Operator CRDs to be installed). Mutually exclusive with
+    # metrics.serviceMonitor.enabled; prefer ServiceMonitor when the Service
+    # already exists.
+    enabled: false
+    # -- Scrape interval.
+    interval: 30s
+    # -- Scrape timeout.
+    scrapeTimeout: 10s
+    # -- Extra labels to add to the PodMonitor.
+    labels: {}
+    # -- Extra annotations for the PodMonitor resource.
+    annotations: {}
+
+# -- NetworkPolicy configuration.
+# Ref: https://kubernetes.io/docs/concepts/services-networking/network-policies/
+networkPolicy:
+  # -- Create a NetworkPolicy for the webhook Pod.
+  # When enabled, allows ingress on the webhook port (8443) from any source,
+  # ingress on the metrics port when metrics are enabled, and egress to
+  # kube-dns (UDP/TCP 53) and external HTTPS (TCP 443). All other ingress
+  # is denied.
+  enabled: false
+
+# -- OpenTelemetry tracing configuration.
+otel:
+  # -- Enable OpenTelemetry tracing by injecting the OTLP endpoint env var into
+  # the container. Has no effect unless an endpoint is also provided.
+  enabled: false
+  # -- OTLP/gRPC collector endpoint, e.g. "otel-collector.monitoring.svc:4317".
+  # Activates tracing when non-empty.
+  endpoint: ""
+  # -- Value for OTEL_SERVICE_NAME. Defaults to the chart fullname when empty.
+  serviceName: ""
+
