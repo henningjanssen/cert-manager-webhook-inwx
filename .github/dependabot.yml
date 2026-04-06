@@ -1,0 +1,38 @@
+version: 2
+
+updates:
+  # Go modules — mirrors renovate "Go dependencies" group
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: daily
+    labels:
+      - dependencies
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
+
+  # Dockerfile base images — mirrors renovate "Docker base images" group
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: daily
+    labels:
+      - dependencies
+    groups:
+      docker-base-images:
+        patterns:
+          - "*"
+
+  # GitHub Actions — mirrors renovate "GitHub Actions" group
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+    labels:
+      - dependencies
+    groups:
+      github-actions:
+        patterns:
+          - "*"
