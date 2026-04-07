@@ -76,8 +76,6 @@ jobs:
           fi
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9.2.0
         with:
-          version: latest
-          go-version-file: go.mod
           args: --timeout=5m ./src/...
