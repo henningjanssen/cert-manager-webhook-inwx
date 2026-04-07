@@ -53,10 +53,6 @@ spec:
           env:
             - name: GROUP_NAME
               value: {{ .Values.groupName | quote }}
-            {{- if .Values.metrics.enabled }}
-            - name: METRICS_ADDR
-              value: {{ printf ":%d" (int .Values.metrics.port) | quote }}
-            {{- end }}
             {{- if and .Values.otel.enabled .Values.otel.endpoint }}
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ .Values.otel.endpoint | quote }}
@@ -70,14 +66,9 @@ spec:
             - name: https
               containerPort: 8443
               protocol: TCP
-            - name: health
+            - name: metrics
               containerPort: 8080
               protocol: TCP
-            {{- if and .Values.metrics.enabled (ne (int .Values.metrics.port) 8080) }}
-            - name: metrics
-              containerPort: {{ .Values.metrics.port }}
-              protocol: TCP
-            {{- end }}
           {{- with .Values.startupProbe }}
           startupProbe:
             {{- toYaml . | nindent 12 }}

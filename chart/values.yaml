@@ -72,10 +72,10 @@ service:
 # Ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 resources:
   limits:
-    cpu: 100m
+    cpu: 500m
     memory: 64Mi
   requests:
-    cpu: 10m
+    cpu: 50m
     memory: 32Mi
 
 # -- Horizontal Pod Autoscaler configuration.
@@ -202,15 +202,11 @@ pki:
 logLevel: 2
 
 # -- Prometheus metrics configuration.
+# The /metrics and /healthz endpoints are always served on port 8080.
 metrics:
-  # -- Expose a Prometheus metrics endpoint (/metrics) and a liveness endpoint
-  # (/healthz) on a dedicated HTTP port inside the webhook container.
-  enabled: false
-  # -- Port for the metrics HTTP server.
-  port: 8080
   # -- ServiceMonitor resource for Prometheus Operator.
   serviceMonitor:
-    # -- Create a ServiceMonitor resource (requires metrics.enabled and the
+    # -- Create a ServiceMonitor resource (requires the
     # Prometheus Operator CRDs to be installed).
     enabled: false
     # -- Scrape interval. Defaults to the Prometheus global scrapeInterval.
@@ -229,10 +225,9 @@ metrics:
     metricRelabelings: []
   # -- PodMonitor resource for Prometheus Operator.
   podMonitor:
-    # -- Create a PodMonitor resource (requires metrics.enabled and the
-    # Prometheus Operator CRDs to be installed). Mutually exclusive with
-    # metrics.serviceMonitor.enabled; prefer ServiceMonitor when the Service
-    # already exists.
+    # -- Create a PodMonitor resource (requires the Prometheus Operator CRDs
+    # to be installed). Mutually exclusive with metrics.serviceMonitor.enabled;
+    # prefer ServiceMonitor when the Service already exists.
     enabled: false
     # -- Scrape interval.
     interval: 30s

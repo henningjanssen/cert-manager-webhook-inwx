@@ -18,16 +18,10 @@ spec:
     - ports:
         - port: 8443
           protocol: TCP
-    # Allow ingress on the health port (kubelet probes).
+    # Allow ingress on the metrics/health port (kubelet probes + Prometheus).
     - ports:
         - port: 8080
           protocol: TCP
-    {{- if and .Values.metrics.enabled (ne (int .Values.metrics.port) 8080) }}
-    # Allow ingress on the metrics port from any source when metrics are enabled.
-    - ports:
-        - port: {{ .Values.metrics.port }}
-          protocol: TCP
-    {{- end }}
   egress:
     # Allow egress to kube-dns for DNS resolution (UDP and TCP on port 53).
     - ports:

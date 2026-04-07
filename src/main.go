@@ -28,14 +28,8 @@ func main() {
 	defer otelShutdown(context.Background()) //nolint:errcheck
 
 	// ── Health + metrics server ────────────────────────────────────────────
-	// Always start a lightweight HTTP server for Kubernetes probes (/healthz).
-	// When METRICS_ADDR is set, /metrics is also exposed on the same server.
-	// Defaults to 0.0.0.0:8080; override via METRICS_ADDR.
-	healthAddr := os.Getenv("METRICS_ADDR")
-	if healthAddr == "" {
-		healthAddr = "0.0.0.0:8080"
-	}
-	startMetricsServer(healthAddr)
+	// Always serve /healthz and /metrics on 0.0.0.0:8080.
+	startMetricsServer("0.0.0.0:8080")
 
 	cmd.RunWebhookServer(GroupName, newSolver())
 }
