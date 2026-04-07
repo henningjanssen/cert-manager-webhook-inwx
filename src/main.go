@@ -30,10 +30,10 @@ func main() {
 	// ── Health + metrics server ────────────────────────────────────────────
 	// Always start a lightweight HTTP server for Kubernetes probes (/healthz).
 	// When METRICS_ADDR is set, /metrics is also exposed on the same server.
-	// Defaults to 127.0.0.1:8080; override via METRICS_ADDR.
+	// Defaults to 0.0.0.0:8080; override via METRICS_ADDR.
 	healthAddr := os.Getenv("METRICS_ADDR")
 	if healthAddr == "" {
-		healthAddr = "127.0.0.1:8080"
+		healthAddr = "0.0.0.0:8080"
 	}
 	startMetricsServer(healthAddr)
 
