@@ -103,25 +103,25 @@ podDisruptionBudget:
 # -- Startup probe configuration.
 # Checked repeatedly until it succeeds, after which liveness and readiness
 # probes take over. Allows slow startup without killing the pod.
-# Max startup time = failureThreshold * periodSeconds = 60s.
+# Max startup time = failureThreshold * periodSeconds = 120s.
 startupProbe:
   httpGet:
     path: /healthz
-    port: 8443
-    scheme: HTTPS
+    port: 8080
+    scheme: HTTP
   periodSeconds: 5
-  timeoutSeconds: 5
-  failureThreshold: 12
+  timeoutSeconds: 3
+  failureThreshold: 24
 
 # -- Liveness probe configuration.
 # Only active after the startupProbe succeeds.
 livenessProbe:
   httpGet:
     path: /healthz
-    port: 8443
-    scheme: HTTPS
+    port: 8080
+    scheme: HTTP
   periodSeconds: 10
-  timeoutSeconds: 5
+  timeoutSeconds: 3
   failureThreshold: 3
 
 # -- Readiness probe configuration.
@@ -129,10 +129,10 @@ livenessProbe:
 readinessProbe:
   httpGet:
     path: /healthz
-    port: 8443
-    scheme: HTTPS
+    port: 8080
+    scheme: HTTP
   periodSeconds: 10
-  timeoutSeconds: 5
+  timeoutSeconds: 3
   failureThreshold: 3
 
 # -- Node selector for pod scheduling.

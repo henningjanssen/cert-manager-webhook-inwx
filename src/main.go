@@ -27,12 +27,15 @@ func main() {
 	}
 	defer otelShutdown(context.Background()) //nolint:errcheck
 
-	// ── Prometheus metrics server ──────────────────────────────────────────
-	// Reads METRICS_ADDR (default 127.0.0.1:8080). When empty, no metrics
-	// server is started.
-	if addr := os.Getenv("METRICS_ADDR"); addr != "" {
-		startMetricsServer(addr)
+	// ── Health + metrics server ────────────────────────────────────────────
+	// Always start a lightweight HTTP server for Kubernetes probes (/healthz).
+	// When METRICS_ADDR is set, /metrics is also exposed on the same server.
+	// Defaults to 127.0.0.1:8080; override via METRICS_ADDR.
+	healthAddr := os.Getenv("METRICS_ADDR")
+	if healthAddr == "" {
+		healthAddr = "127.0.0.1:8080"
 	}
+	startMetricsServer(healthAddr)
 
 	cmd.RunWebhookServer(GroupName, newSolver())
 }

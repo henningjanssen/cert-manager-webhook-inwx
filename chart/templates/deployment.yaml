@@ -70,7 +70,10 @@ spec:
             - name: https
               containerPort: 8443
               protocol: TCP
-            {{- if .Values.metrics.enabled }}
+            - name: health
+              containerPort: 8080
+              protocol: TCP
+            {{- if and .Values.metrics.enabled (ne (int .Values.metrics.port) 8080) }}
             - name: metrics
               containerPort: {{ .Values.metrics.port }}
               protocol: TCP
