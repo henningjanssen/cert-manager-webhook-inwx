@@ -38,7 +38,6 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value={{ branch }}
-            type=sha,format=short,prefix={{ branch }}-
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
@@ -58,10 +57,9 @@ jobs:
         # Use 0.0.0-<branch>+<short-sha> as the OCI chart version so it is
         # always lower than any real release and is easily identifiable.
         run: |
-          SHORT_SHA="${GITHUB_SHA::7}"
           BRANCH="${GITHUB_REF_NAME}"
-          echo "version=0.0.0-${BRANCH}+${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "chart_name=cert-manager-webhook-inwx-0.0.0-${BRANCH}+${SHORT_SHA}.tgz" >> "$GITHUB_OUTPUT"
+          echo "version=0.0.0-${BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "chart_name=cert-manager-webhook-inwx-0.0.0-${BRANCH}.tgz" >> "$GITHUB_OUTPUT"
 
       - name: Lint Helm chart
         run: |
@@ -72,7 +70,7 @@ jobs:
         run: |
           helm package chart/ \
             --version "${{ steps.version.outputs.version }}" \
-            --app-version "${{ github.ref_name }}-${{ github.sha }}"
+            --app-version "${{ github.ref_name }}"
 
       - name: Log in to GitHub Container Registry (OCI Helm)
         run: |

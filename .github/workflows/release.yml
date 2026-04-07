@@ -88,11 +88,6 @@ jobs:
             --version "${{ steps.version.outputs.version }}" \
             --app-version "${{ steps.version.outputs.version }}"
 
-      - name: Upload Helm chart as release asset
-        uses: softprops/action-gh-release@v2
-        with:
-          files: "*.tgz"
-
       - name: Log in to GitHub Container Registry (OCI Helm)
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | \
