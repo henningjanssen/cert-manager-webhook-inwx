@@ -24,9 +24,9 @@ import (
 type inwxClient interface {
 	Login() error
 	Logout() error
-	CreateRecord(req *goinwx.NameserverRecordRequest) (int, error)
+	CreateRecord(req *goinwx.NameserverRecordRequest) (string, error)
 	Info(req *goinwx.NameserverInfoRequest) (*goinwx.NameserverInfoResponse, error)
-	DeleteRecord(id int) error
+	DeleteRecord(id string) error
 }
 
 // realInwxClient adapts *goinwx.Client to the inwxClient interface.
@@ -36,13 +36,13 @@ type realInwxClient struct {
 
 func (r *realInwxClient) Login() error  { _, err := r.c.Account.Login(); return err }
 func (r *realInwxClient) Logout() error { return r.c.Account.Logout() }
-func (r *realInwxClient) CreateRecord(req *goinwx.NameserverRecordRequest) (int, error) {
+func (r *realInwxClient) CreateRecord(req *goinwx.NameserverRecordRequest) (string, error) {
 	return r.c.Nameservers.CreateRecord(req)
 }
 func (r *realInwxClient) Info(req *goinwx.NameserverInfoRequest) (*goinwx.NameserverInfoResponse, error) {
 	return r.c.Nameservers.Info(req)
 }
-func (r *realInwxClient) DeleteRecord(id int) error {
+func (r *realInwxClient) DeleteRecord(id string) error {
 	return r.c.Nameservers.DeleteRecord(id)
 }
 
@@ -198,7 +198,7 @@ func (s *inwxDNSSolver) CleanUp(ch *v1alpha1.ChallengeRequest) (retErr error) {
 	for _, record := range infoResp.Records {
 		if record.Content == ch.Key {
 			if err := client.DeleteRecord(record.ID); err != nil {
-				retErr = fmt.Errorf("failed to delete TXT record with id %d: %w", record.ID, err)
+				retErr = fmt.Errorf("failed to delete TXT record with id %s: %w", record.ID, err)
 				return
 			}
 		}

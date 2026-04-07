@@ -130,7 +130,7 @@ func TestPresentRecordsErrorMetric(t *testing.T) {
 func TestCleanUpRecordsSuccessMetric(t *testing.T) {
 	fc := &fakeInwxClient{
 		infoResp: &goinwx.NameserverInfoResponse{
-			Records: []goinwx.NameserverRecord{{ID: 1, Content: "tok"}},
+			Records: []goinwx.NameserverRecord{{ID: "1", Content: "tok"}},
 		},
 	}
 	s, _ := buildSolverWithMetrics(fc, testSecret("inwx-credentials", "default"))

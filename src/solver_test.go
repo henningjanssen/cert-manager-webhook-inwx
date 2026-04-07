@@ -28,23 +28,23 @@ type fakeInwxClient struct {
 	infoResp *goinwx.NameserverInfoResponse
 	infoErr  error
 
-	deleteCalls []int
+	deleteCalls []string
 	deleteErr   error
 }
 
 func (f *fakeInwxClient) Login() error  { return f.loginErr }
 func (f *fakeInwxClient) Logout() error { f.logoutCalls++; return nil }
 
-func (f *fakeInwxClient) CreateRecord(req *goinwx.NameserverRecordRequest) (int, error) {
+func (f *fakeInwxClient) CreateRecord(req *goinwx.NameserverRecordRequest) (string, error) {
 	f.createCalls = append(f.createCalls, req)
-	return 1, f.createErr
+	return "1", f.createErr
 }
 
 func (f *fakeInwxClient) Info(_ *goinwx.NameserverInfoRequest) (*goinwx.NameserverInfoResponse, error) {
 	return f.infoResp, f.infoErr
 }
 
-func (f *fakeInwxClient) DeleteRecord(id int) error {
+func (f *fakeInwxClient) DeleteRecord(id string) error {
 	f.deleteCalls = append(f.deleteCalls, id)
 	return f.deleteErr
 }
@@ -256,8 +256,8 @@ func TestCleanUp_HappyPath(t *testing.T) {
 	fc := &fakeInwxClient{
 		infoResp: &goinwx.NameserverInfoResponse{
 			Records: []goinwx.NameserverRecord{
-				{ID: 42, Content: "token123"},
-				{ID: 99, Content: "other-token"},
+				{ID: "42", Content: "token123"},
+				{ID: "99", Content: "other-token"},
 			},
 		},
 	}
@@ -272,8 +272,8 @@ func TestCleanUp_HappyPath(t *testing.T) {
 	if len(fc.deleteCalls) != 1 {
 		t.Fatalf("expected 1 DeleteRecord call, got %d", len(fc.deleteCalls))
 	}
-	if fc.deleteCalls[0] != 42 {
-		t.Errorf("expected record ID 42 to be deleted, got %d", fc.deleteCalls[0])
+	if fc.deleteCalls[0] != "42" {
+		t.Errorf("expected record ID 42 to be deleted, got %s", fc.deleteCalls[0])
 	}
 	if fc.logoutCalls != 1 {
 		t.Errorf("expected Logout called once, got %d times", fc.logoutCalls)
@@ -284,7 +284,7 @@ func TestCleanUp_NoMatchingRecord(t *testing.T) {
 	fc := &fakeInwxClient{
 		infoResp: &goinwx.NameserverInfoResponse{
 			Records: []goinwx.NameserverRecord{
-				{ID: 99, Content: "different-token"},
+				{ID: "99", Content: "different-token"},
 			},
 		},
 	}
@@ -319,9 +319,9 @@ func TestCleanUp_DeletesMultipleMatchingRecords(t *testing.T) {
 	fc := &fakeInwxClient{
 		infoResp: &goinwx.NameserverInfoResponse{
 			Records: []goinwx.NameserverRecord{
-				{ID: 10, Content: "token"},
-				{ID: 11, Content: "token"},
-				{ID: 12, Content: "other"},
+				{ID: "10", Content: "token"},
+				{ID: "11", Content: "token"},
+				{ID: "12", Content: "other"},
 			},
 		},
 	}
@@ -386,7 +386,7 @@ func TestCleanUp_InfoFails(t *testing.T) {
 func TestCleanUp_DeleteFails(t *testing.T) {
 	fc := &fakeInwxClient{
 		infoResp: &goinwx.NameserverInfoResponse{
-			Records: []goinwx.NameserverRecord{{ID: 1, Content: "token"}},
+			Records: []goinwx.NameserverRecord{{ID: "1", Content: "token"}},
 		},
 		deleteErr: errors.New("delete failed"),
 	}
