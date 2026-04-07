@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -77,9 +76,6 @@ func defaultRegisterer() prometheus.Registerer {
 // startMetricsServer starts an HTTP server on addr exposing /metrics and
 // /healthz. The call is non-blocking; the server runs until the process exits.
 func startMetricsServer(addr string) {
-	if strings.HasPrefix(addr, ":") {
-		addr = "127.0.0.1" + addr
-	}
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
