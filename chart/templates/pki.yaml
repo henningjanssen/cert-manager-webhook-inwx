@@ -1,7 +1,6 @@
 {{- if not .Values.pki.existingIssuer.name }}
 ---
 # Self-signed bootstrap issuer — used only to issue the CA certificate below.
-# hook-weight -5: applied first, before all other chart resources.
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
@@ -9,16 +8,11 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
-  annotations:
-    helm.sh/hook: pre-install,pre-upgrade
-    helm.sh/hook-weight: "-5"
-    helm.sh/hook-delete-policy: before-hook-creation
 spec:
   selfSigned: {}
 
 ---
 # CA certificate — the root of trust for the webhook's TLS certificate.
-# hook-weight -4: applied after the selfsigned issuer.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -26,10 +20,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
-  annotations:
-    helm.sh/hook: pre-install,pre-upgrade
-    helm.sh/hook-weight: "-4"
-    helm.sh/hook-delete-policy: before-hook-creation
 spec:
   isCA: true
   commonName: {{ include "cert-manager-webhook-inwx.fullname" . }}-ca
@@ -44,7 +34,6 @@ spec:
 
 ---
 # Issuer backed by the CA — used to sign the webhook server certificate.
-# hook-weight -3: applied after the CA certificate secret exists.
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
@@ -52,10 +41,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
-  annotations:
-    helm.sh/hook: pre-install,pre-upgrade
-    helm.sh/hook-weight: "-3"
-    helm.sh/hook-delete-policy: before-hook-creation
 spec:
   ca:
     secretName: {{ include "cert-manager-webhook-inwx.fullname" . }}-ca
@@ -63,7 +48,6 @@ spec:
 
 ---
 # TLS certificate presented by the webhook server.
-# hook-weight -2: applied last in the PKI chain, before the Deployment (weight 0).
 # The cert-manager.io/inject-ca-from annotation on the APIService makes
 # cert-manager automatically populate spec.caBundle with the issuing CA.
 apiVersion: cert-manager.io/v1
@@ -73,10 +57,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
-  annotations:
-    helm.sh/hook: pre-install,pre-upgrade
-    helm.sh/hook-weight: "-2"
-    helm.sh/hook-delete-policy: before-hook-creation
 spec:
   secretName: {{ include "cert-manager-webhook-inwx.fullname" . }}-webhook-tls
   duration: {{ .Values.pki.duration }}
