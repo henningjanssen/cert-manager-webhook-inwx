@@ -188,6 +188,15 @@ pki:
   algorithm: ECDSA
   # -- Key size. 256 / 384 for ECDSA; 2048 / 4096 for RSA.
   size: 256
+  # -- Use an existing cert-manager Issuer or ClusterIssuer instead of the
+  # self-signed CA bootstrapped by this chart. When set, the self-signed
+  # Issuer, CA Certificate, and CA-backed Issuer are not created.
+  # Example:
+  #   existingIssuer:
+  #     name: my-ca-issuer
+  #     kind: ClusterIssuer   # or Issuer
+  #     group: cert-manager.io
+  existingIssuer: {}
 
 # -- Webhook log verbosity. 0 = errors only, 4 = debug.
 logLevel: 2
