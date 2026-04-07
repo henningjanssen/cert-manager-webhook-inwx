@@ -145,8 +145,8 @@ subjects:
     namespace: {{ .Release.Namespace }}
 
 ---
-# Grant cert-manager (in its own namespace) the right to call this webhook
-# via the aggregated API server.
+# Grant cert-manager (in its own namespace) the right to read this webhook's
+# TLS secret so it can verify the aggregated API server's certificate.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
@@ -158,6 +158,40 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: {{ include "cert-manager-webhook-inwx.fullname" . }}:secret-reader
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: {{ .Values.certManager.serviceAccountName }}
+    namespace: {{ .Values.certManager.namespace }}
+
+---
+# ClusterRole: allow cert-manager to call this webhook solver via the
+# aggregated API server (cluster-scoped, required by the ACME webhook protocol).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:webhook-caller
+  labels:
+    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - {{ .Values.groupName }}
+    resources:
+      - inwx
+    verbs:
+      - create
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:cert-manager-webhook-caller
+  labels:
+    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:webhook-caller
 subjects:
   - apiGroup: ""
     kind: ServiceAccount
