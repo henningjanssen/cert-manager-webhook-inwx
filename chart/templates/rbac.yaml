@@ -73,6 +73,43 @@ subjects:
     namespace: {{ .Release.Namespace }}
 
 ---
+# Role: allow the webhook to read INWX credential secrets in this namespace.
+# The secret name is specified at runtime in the solver config, so no
+# resourceNames restriction is applied here.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:credentials-reader
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - "secrets"
+    verbs:
+      - "get"
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:credentials-reader
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:credentials-reader
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: {{ include "cert-manager-webhook-inwx.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+
+---
 # ClusterRole: allow the webhook's aggregated API server to create
 # SubjectAccessReviews, required to authorise incoming API calls.
 apiVersion: rbac.authorization.k8s.io/v1
