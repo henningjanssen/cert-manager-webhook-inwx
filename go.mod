@@ -3,7 +3,7 @@ module github.com/henningjanssen/cert-manager-webhook-inwx
 go 1.26.0
 
 require (
-	github.com/cert-manager/cert-manager v1.20.1
+	github.com/cert-manager/cert-manager v1.20.2
 	github.com/nrdcg/goinwx v0.12.0
 	github.com/prometheus/client_golang v1.23.2
 	go.opentelemetry.io/otel v1.43.0
