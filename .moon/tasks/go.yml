@@ -51,8 +51,6 @@ tasks:
     script: 'go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./src/...'
     inputs:
       - '@group(sources)'
-    options:
-      allowFailure: true
 
   # Guards the Go version in the Dockerfile and mise.toml against go.mod.
   versions-check:

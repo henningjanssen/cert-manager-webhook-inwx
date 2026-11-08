@@ -48,6 +48,7 @@ case "$mode" in
   lint)
     run helm lint "$CHART_DIR"
     run helm template "$CHART_NAME" "$CHART_DIR" >/dev/null
+    [ ! -f "$CHART_DIR/ci-values.yaml" ] || run helm template "$CHART_NAME" "$CHART_DIR" --values "$CHART_DIR/ci-values.yaml" >/dev/null
     ;;
   package)
     version="0.0.0-dev"
