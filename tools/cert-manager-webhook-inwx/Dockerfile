@@ -1,6 +1,6 @@
 # Build stage — cross-compile from the build host's arch to $TARGETARCH so a
 # multi-arch `IMAGE_PLATFORMS` builds without QEMU emulating the compiler.
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine@sha256:87c65a688975c0b1d4585d204874c45ca78354670e3a5f11368c5a492303d696 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18 AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
