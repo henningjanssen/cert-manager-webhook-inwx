@@ -22,6 +22,7 @@ metadata:
     {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
 spec:
   isCA: true
+  duration: {{ .Values.pki.caDuration }}
   commonName: {{ include "cert-manager-webhook-inwx.fullname" . }}-ca
   secretName: {{ include "cert-manager-webhook-inwx.fullname" . }}-ca
   privateKey:

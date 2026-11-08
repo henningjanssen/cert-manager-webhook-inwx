@@ -33,4 +33,7 @@ spec:
     - ports:
         - port: 443
           protocol: TCP
+    {{- with .Values.networkPolicy.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 {{- end }}

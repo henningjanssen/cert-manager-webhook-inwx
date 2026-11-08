@@ -35,59 +35,26 @@ subjects:
     namespace: {{ .Release.Namespace }}
 
 ---
-# Role: allow the cert-manager controller to read this webhook's TLS secret
-# so it can call the aggregated API.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:secret-reader
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
-rules:
-  - apiGroups:
-      - ""
-    resources:
-      - "secrets"
-    resourceNames:
-      - {{ include "cert-manager-webhook-inwx.fullname" . }}-webhook-tls
-    verbs:
-      - "get"
-
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:secret-reader
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:secret-reader
-subjects:
-  - apiGroup: ""
-    kind: ServiceAccount
-    name: {{ include "cert-manager-webhook-inwx.serviceAccountName" . }}
-    namespace: {{ .Release.Namespace }}
-
----
+{{- range $namespace := concat (list .Release.Namespace) .Values.credentialNamespaces | uniq }}
 # Role: allow the webhook to read INWX credential secrets in this namespace.
-# The secret name is specified at runtime in the solver config, so no
-# resourceNames restriction is applied here.
+# Secret names come from the solver config at runtime, so they are only
+# restricted when credentialSecretNames is set.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:credentials-reader
-  namespace: {{ .Release.Namespace }}
+  name: {{ include "cert-manager-webhook-inwx.fullname" $ }}:credentials-reader
+  namespace: {{ $namespace }}
   labels:
-    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+    {{- include "cert-manager-webhook-inwx.labels" $ | nindent 4 }}
 rules:
   - apiGroups:
       - ""
     resources:
       - "secrets"
+    {{- with $.Values.credentialSecretNames }}
+    resourceNames:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
     verbs:
       - "get"
 
@@ -95,21 +62,22 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:credentials-reader
-  namespace: {{ .Release.Namespace }}
+  name: {{ include "cert-manager-webhook-inwx.fullname" $ }}:credentials-reader
+  namespace: {{ $namespace }}
   labels:
-    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
+    {{- include "cert-manager-webhook-inwx.labels" $ | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:credentials-reader
+  name: {{ include "cert-manager-webhook-inwx.fullname" $ }}:credentials-reader
 subjects:
   - apiGroup: ""
     kind: ServiceAccount
-    name: {{ include "cert-manager-webhook-inwx.serviceAccountName" . }}
-    namespace: {{ .Release.Namespace }}
+    name: {{ include "cert-manager-webhook-inwx.serviceAccountName" $ }}
+    namespace: {{ $.Release.Namespace }}
 
 ---
+{{- end }}
 # ClusterRole: allow the webhook's aggregated API server to create
 # SubjectAccessReviews, required to authorise incoming API calls.
 apiVersion: rbac.authorization.k8s.io/v1
@@ -180,26 +148,6 @@ subjects:
     kind: ServiceAccount
     name: {{ include "cert-manager-webhook-inwx.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
-
----
-# Grant cert-manager (in its own namespace) the right to read this webhook's
-# TLS secret so it can verify the aggregated API server's certificate.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:cert-manager-webhook-caller
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "cert-manager-webhook-inwx.labels" . | nindent 4 }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: {{ include "cert-manager-webhook-inwx.fullname" . }}:secret-reader
-subjects:
-  - apiGroup: ""
-    kind: ServiceAccount
-    name: {{ .Values.certManager.serviceAccountName }}
-    namespace: {{ .Values.certManager.namespace }}
 
 ---
 # ClusterRole: allow cert-manager to call this webhook solver via the

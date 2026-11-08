@@ -1,0 +1,24 @@
+# Rendered by `helm.sh lint` so templates that are off by default are checked too.
+autoscaling:
+  enabled: true
+  targetMemoryUtilizationPercentage: 80
+podDisruptionBudget:
+  enabled: true
+networkPolicy:
+  enabled: true
+  extraEgress:
+    - ports:
+        - port: 6443
+          protocol: TCP
+metrics:
+  serviceMonitor:
+    enabled: true
+  podMonitor:
+    enabled: true
+otel:
+  enabled: true
+  endpoint: http://otel-collector.monitoring.svc:4317
+credentialNamespaces:
+  - apps
+credentialSecretNames:
+  - inwx-credentials

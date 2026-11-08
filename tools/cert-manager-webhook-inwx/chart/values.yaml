@@ -178,8 +178,20 @@ certManager:
   # -- Service account name used by the cert-manager controller.
   serviceAccountName: cert-manager
 
+# -- Extra namespaces whose INWX credential secrets the webhook may read, needed
+# for an Issuer outside the release namespace. The namespaces must already exist.
+credentialNamespaces: []
+
+# -- Restrict the webhook to these INWX credential secret names. When empty, it
+# can read every secret in the namespaces above and the release namespace.
+credentialSecretNames: []
+# - inwx-credentials
+
 # -- PKI configuration for the webhook's TLS certificate chain.
 pki:
+  # -- Duration of the self-signed CA. Keep it well above `duration`: cert-manager
+  # does not reissue the webhook certificate when the CA renews.
+  caDuration: 43800h
   # -- Duration of the webhook TLS certificate.
   duration: 8760h
   # -- How long before expiry cert-manager renews the certificate.
@@ -243,17 +255,23 @@ metrics:
 networkPolicy:
   # -- Create a NetworkPolicy for the webhook Pod.
   # When enabled, allows ingress on the webhook port (8443) from any source,
-  # ingress on the metrics port when metrics are enabled, and egress to
-  # kube-dns (UDP/TCP 53) and external HTTPS (TCP 443). All other ingress
-  # is denied.
+  # ingress on the metrics port, and egress to kube-dns (UDP/TCP 53) and
+  # HTTPS (TCP 443). All other traffic is denied.
   enabled: false
+  # -- Additional egress rules. Many CNIs check the API server's real port, so
+  # clusters serving it on 6443 need that here, and tracing needs its OTLP port.
+  extraEgress: []
+  # - ports:
+  #     - port: 6443
+  #       protocol: TCP
 
 # -- OpenTelemetry tracing configuration.
 otel:
   # -- Enable OpenTelemetry tracing by injecting the OTLP endpoint env var into
   # the container. Has no effect unless an endpoint is also provided.
   enabled: false
-  # -- OTLP/gRPC collector endpoint, e.g. "otel-collector.monitoring.svc:4317".
+  # -- OTLP/gRPC collector URL, e.g. "http://otel-collector.monitoring.svc:4317".
+  # The scheme selects plain text (http) or TLS (https).
   # Activates tracing when non-empty.
   endpoint: ""
   # -- Value for OTEL_SERVICE_NAME. Defaults to the chart fullname when empty.

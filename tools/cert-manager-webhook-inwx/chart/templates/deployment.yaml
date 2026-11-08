@@ -54,6 +54,9 @@ spec:
             - name: GROUP_NAME
               value: {{ .Values.groupName | quote }}
             {{- if and .Values.otel.enabled .Values.otel.endpoint }}
+            {{- if not (contains "://" .Values.otel.endpoint) }}
+            {{- fail "otel.endpoint must be a URL, e.g. http://otel-collector.monitoring.svc:4317" }}
+            {{- end }}
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ .Values.otel.endpoint | quote }}
             - name: OTEL_SERVICE_NAME
