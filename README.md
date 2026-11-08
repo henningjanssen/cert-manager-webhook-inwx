@@ -1,244 +1,124 @@
-# cert-manager-webhook-inwx
+# tools monorepo
 
-A [cert-manager](https://cert-manager.io/) ACME DNS01 webhook solver for [INWX](https://www.inwx.com/).
+Small, unrelated **docker + helm** tools that share one build/release pipeline,
+orchestrated by [moon](https://moonrepo.dev). One directory per tool under
+[`tools/`](tools/); each is built, versioned and released independently.
 
-## Prerequisites
+| Tool | What it is |
+|------|------------|
+| [`cert-manager-webhook-inwx`](tools/cert-manager-webhook-inwx/) | cert-manager ACME DNS01 webhook solver for INWX |
 
-- Kubernetes 1.24+
-- cert-manager 1.13+
-- Helm 3.x
+- **Add a tool:** [`docs/adding-a-new-tool.md`](docs/adding-a-new-tool.md)
+- **Why it's built this way:** [`docs/adr/`](docs/adr/)
 
-## Installation
-
-```bash
-helm install cert-manager-webhook-inwx \
-  oci://ghcr.io/henningjanssen/charts/cert-manager-webhook-inwx \
-  --namespace cert-manager \
-  --create-namespace
-```
-
-## Configuration
-
-### 1. Create a Kubernetes secret with your INWX credentials
+## Setup
 
 ```bash
-kubectl create secret generic inwx-credentials \
-  --namespace cert-manager \
-  --from-literal=username=<YOUR_INWX_USERNAME> \
-  --from-literal=password=<YOUR_INWX_PASSWORD>
+mise install     # every tool version is pinned in mise.toml
 ```
 
-The secret must exist in the same namespace as your `Issuer`, or in the cert-manager namespace for `ClusterIssuer`.
+## Tasks
 
-### 2. Create a ClusterIssuer referencing the webhook
+Every tool responds to the same tasks. Run `moon run <tool>:<task>`, or
+`moon run :<task>` for all tools. moon reserves `:` as the separator between
+project and task, so `build:image` is spelled `build-image`.
 
-```yaml
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: letsencrypt-inwx
-spec:
-  acme:
-    server: https://acme-v02.api.letsencrypt.org/directory
-    email: user@example.com
-    privateKeySecretRef:
-      name: letsencrypt-account-key
-    solvers:
-      - dns01:
-          webhook:
-            groupName: acme.inwx.com
-            solverName: inwx
-            config:
-              secretName: inwx-credentials
-              # Optional: override secret keys (defaults: "username", "password")
-              # usernameKey: user
-              # passwordKey: pass
-```
+| Task | What it does |
+|------|--------------|
+| `build` | Compile the tool |
+| `lint` / `lint-fix` | Check code and chart / apply automatic fixes |
+| `format` / `format-fix` | Check formatting / rewrite files |
+| `test` | Run the tests |
+| `build-image` | Build the image to `tools/<tool>/dist/<image>.oci.tar` (`docker load -i` to run it) |
+| `build-chart` | Package the chart into `tools/<tool>/dist/` |
+| `publish-image` | Build and push the image (needs `RELEASE_VERSION`, `PR_NUMBER` or `BRANCH_TAG`) |
+| `publish-chart` | Package and push the chart (same variables) |
 
-### 3. Issue a certificate
+CI is the only place that should run the publish tasks. It uses
+`moon exec --ignore-ci-checks`, because they are excluded from `moon ci`.
 
-```yaml
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: example-tls
-  namespace: default
-spec:
-  secretName: example-tls
-  dnsNames:
-    - example.com
-    - "*.example.com"
-  issuerRef:
-    name: letsencrypt-inwx
-    kind: ClusterIssuer
-```
+## CI and releases
 
-## Helm values
+| Trigger | Effect (changed tools only) |
+|---|---|
+| PR or push to `main` / `dev` | `moon ci`: checks, nothing published |
+| PR opened or updated | Publishes `pr-<n>` artifacts |
+| PR closed or merged | Deletes that PR's artifacts |
+| Push to `main` / `dev` | Updates the branch's tags |
+| `<tool>@<version>` tag | Releases that tool |
 
-### Core
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `groupName` | `acme.inwx.com` | Unique group name for the webhook API |
-| `replicaCount` | `1` | Number of webhook replicas |
-| `logLevel` | `2` | Log verbosity: 0 = errors only, 4 = debug |
-
-### Image
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `image.repository` | `ghcr.io/henningjanssen/cert-manager-webhook-inwx` | Image repository |
-| `image.tag` | `""` | Image tag — defaults to chart `appVersion` |
-| `image.digest` | `""` | Image digest (e.g. `sha256:…`). Takes precedence over `tag` when set |
-| `image.pullPolicy` | `IfNotPresent` | Image pull policy |
-
-### cert-manager integration
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `certManager.namespace` | `cert-manager` | Namespace where cert-manager is installed |
-| `certManager.serviceAccountName` | `cert-manager` | cert-manager controller service account name |
-
-### TLS / PKI
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `pki.duration` | `8760h` | Webhook TLS certificate lifetime |
-| `pki.renewBefore` | `720h` | Renewal window before expiry |
-| `pki.algorithm` | `ECDSA` | Key algorithm (`ECDSA` or `RSA`) |
-| `pki.size` | `256` | Key size (256/384 for ECDSA; 2048/4096 for RSA) |
-
-### Scaling & availability
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `autoscaling.enabled` | `false` | Enable HPA (ignores `replicaCount` when true) |
-| `autoscaling.minReplicas` | `1` | HPA minimum replicas |
-| `autoscaling.maxReplicas` | `5` | HPA maximum replicas |
-| `autoscaling.targetCPUUtilizationPercentage` | `80` | HPA CPU target (%) |
-| `autoscaling.targetMemoryUtilizationPercentage` | `""` | HPA memory target (%) |
-| `podDisruptionBudget.enabled` | `false` | Enable PodDisruptionBudget |
-| `podDisruptionBudget.minAvailable` | `1` | Minimum available pods |
-
-### Observability
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `metrics.enabled` | `false` | Expose `/metrics` and `/healthz` on a dedicated HTTP port |
-| `metrics.port` | `8080` | Metrics server port |
-| `metrics.serviceMonitor.enabled` | `false` | Create a Prometheus Operator `ServiceMonitor` |
-| `metrics.podMonitor.enabled` | `false` | Create a Prometheus Operator `PodMonitor` |
-| `otel.enabled` | `false` | Inject `OTEL_EXPORTER_OTLP_ENDPOINT` into the container |
-| `otel.endpoint` | `""` | OTLP/gRPC collector endpoint, e.g. `otel-collector.monitoring.svc:4317` |
-| `otel.serviceName` | `""` | Value for `OTEL_SERVICE_NAME` (defaults to chart fullname) |
-
-### Networking
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `service.type` | `ClusterIP` | Service type |
-| `service.port` | `443` | Service port |
-| `networkPolicy.enabled` | `false` | Create a `NetworkPolicy` restricting ingress/egress |
-| `ingress.enabled` | `false` | Create a Kubernetes `Ingress` for the metrics endpoint |
-| `ingress.className` | `""` | `ingressClassName` |
-| `ingress.annotations` | `{}` | Ingress annotations |
-| `ingress.hosts` | see values | Host rules (default path: `/metrics`) |
-| `ingress.tls` | `[]` | TLS configuration |
-| `httpRoute.enabled` | `false` | Create a Gateway API `HTTPRoute` for the metrics endpoint |
-| `httpRoute.parentRefs` | `[]` | Gateway references (required when `httpRoute.enabled: true`) |
-| `httpRoute.hostnames` | `[]` | Hostnames to match |
-
-### Probes
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `startupProbe` | see values | Probe checked until first success; gives the webhook up to 60 s to start before liveness kicks in |
-| `livenessProbe` | see values | Active after startup probe succeeds |
-| `readinessProbe` | see values | Active after startup probe succeeds |
-
-### Scheduling
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `nodeSelector` | `{}` | Node selector |
-| `tolerations` | `[]` | Pod tolerations |
-| `affinity` | `{}` | Pod affinity |
-| `topologySpreadConstraints` | `[]` | Topology spread constraints |
-| `priorityClassName` | `""` | Priority class name |
-
-### Advanced
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `extraEnv` | `[]` | Extra environment variables |
-| `extraVolumes` | `[]` | Extra volumes |
-| `extraVolumeMounts` | `[]` | Extra volume mounts |
-| `podAnnotations` | `{}` | Pod annotations |
-| `podLabels` | `{}` | Pod labels |
-| `serviceAccount.create` | `true` | Create a ServiceAccount |
-| `serviceAccount.annotations` | `{}` | ServiceAccount annotations |
-| `terminationGracePeriodSeconds` | `30` | Graceful termination period |
-
-## Troubleshooting
-
-### Certificate stuck in pending
-
-1. Check webhook logs: `kubectl logs -n cert-manager -l app.kubernetes.io/name=cert-manager-webhook-inwx`
-2. Describe the failing `CertificateRequest`: `kubectl describe certificaterequest -n <namespace> <name>`
-3. Verify the secret exists and contains the right keys:
-   ```bash
-   kubectl get secret inwx-credentials -n cert-manager -o jsonpath='{.data}' | base64 -d
-   ```
-
-### "secret not found" error
-
-The credential secret must be in the same namespace as the `Issuer`. For a `ClusterIssuer`, cert-manager reads secrets from the cert-manager namespace — make sure the secret is created there.
-
-### DNS record not cleaned up after challenge
-
-cert-manager calls `CleanUp` after every challenge regardless of outcome. If a record remains, check the webhook logs for errors from the INWX API and verify the credentials have permission to delete records in that zone.
-
-### Webhook TLS certificate not issued
-
-The webhook bootstraps its own TLS via cert-manager. If the `APIService` is not ready, cert-manager itself may not be running yet. Check:
+### Releasing
 
 ```bash
-kubectl get certificate -n cert-manager
-kubectl describe apiservice v1alpha1.acme.inwx.com
+git tag cert-manager-webhook-inwx@1.2.3            # or 1.2.3-alpha.1, -beta.1, -rc.1
+git push origin cert-manager-webhook-inwx@1.2.3
 ```
 
-## Development
+The tag starts `release.yml`, which tests and lints the tool, pushes its image and
+chart, attests both, moves the `x.y`, `x` and `latest` tags where the version is
+the newest, then creates a draft GitHub Release `<tool>@<version>` with the image
+and chart digests in its notes and the chart `.tgz` and SPDX SBOMs attached, and
+publishes it. Publishing locks the git tag and assets; the title and notes stay
+editable.
 
-### Requirements
+### Tags
 
-- Go 1.25+
-- Docker
-- [Task](https://taskfile.dev) (optional but recommended)
+| Source | Image tags | Chart tags | Changes? |
+|---|---|---|---|
+| Stable release | `x.y.z` | `x.y.z` | Never |
+| Stable release, if newest in its range | `x.y`, `x`, `latest` | the same | Moves to the newest |
+| Prerelease | `x.y.z-rc.N` | `x.y.z-rc.N` | Never; moves no other tag |
+| `main` / `dev` | `main` / `dev`, `sha-<short>` | `0.0.0-main` / `0.0.0-dev`, `main` / `dev` | Moves with the branch |
+| PR | `pr-<n>`, `pr-<n>-<sha>` | `0.0.0-pr<n>_<short>` | Deleted when the PR closes |
 
-### Common tasks
+Images are at `ghcr.io/<owner>/<tool>`, charts at
+`oci://ghcr.io/<owner>/charts/<tool>`.
+
+Helm ignores prereleases in ranges, so install one with its exact version or
+`--devel`. `--version 1.2` resolves as a range to the newest `1.2.z`:
 
 ```bash
-task build          # compile binary → bin/webhook
-task test           # run tests with race detector + coverage
-task lint           # golangci-lint
-task ci             # full local pipeline: tidy, lint, test, vulncheck, helm lint
-task helm:lint      # lint and dry-run render the Helm chart
-task docker:build   # build Docker image (TAG=dev)
+helm install x oci://ghcr.io/<owner>/charts/<tool> --version 1.2.3-rc.1
 ```
 
-See `Taskfile.yml` for all available tasks.
+PR cleanup only deletes a version when every tag on it belongs to that PR, so
+release artifacts cannot be removed by it.
 
-### Building manually
+A release that fails after a push uses up that version: delete any leftover draft
+and release the next one. Reasoning is in
+[ADR 0004](docs/adr/0004-immutable-per-tool-releases.md).
+
+### Verifying a release
+
+Every released image and chart has a signed build provenance attestation and an SBOM
+attestation. The exact commands for a release are in its release notes:
 
 ```bash
-go mod tidy
-go build -o bin/webhook ./src/
+gh attestation verify oci://ghcr.io/<owner>/<tool>@sha256:... --repo <owner>/<repo>
+gh attestation verify oci://ghcr.io/<owner>/charts/<tool>@sha256:... --repo <owner>/<repo>
 ```
 
-```bash
-docker build -t cert-manager-webhook-inwx:dev .
+Add `--predicate-type https://spdx.dev/Document/v2.3` to check the SBOM
+attestation instead of provenance.
+
+### Reproducible builds
+
+Building the same commit again produces the same image digest and chart
+`.tgz`. A chart's OCI manifest digest differs per push, because helm records a
+push-time annotation. How:
+
+- all timestamps come from the commit (`SOURCE_DATE_EPOCH`);
+- base images are pinned by digest, and BuildKit and every CLI by version;
+- Go builds use `-trimpath` and no embedded VCS data;
+- chart archives are repacked with sorted entries and fixed owners;
+- SBOMs and provenance are attached as separate attestations, so they cannot
+  change the digest of the artifact itself.
+
+## Layout
+
 ```
-
-## License
-
-MIT
+tools/<tool>/       one moon project per tool: moon.yml, Dockerfile, chart/, sources
+.moon/              workspace config and inherited task definitions
+scripts/            all build/publish logic; CI only calls these through moon
+mise.toml           pinned tool versions
+```
