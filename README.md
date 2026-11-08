@@ -61,6 +61,13 @@ and chart digests in its notes and the chart `.tgz` and SPDX SBOMs attached, and
 publishes it. Publishing locks the git tag and assets; the title and notes stay
 editable.
 
+The notes start with a changelog from the commits that touch `tools/<tool>` since
+the tool's previous release (a stable release counts from the last stable one).
+Commits are sorted by their [Conventional Commits](https://www.conventionalcommits.org)
+type. Anything marked `type!:` or with a `BREAKING CHANGE:` footer is listed first
+under **Breaking changes**, so mark breaking commits. Preview with
+`bash scripts/release-notes.sh <tool>@<version>` once the tag exists locally.
+
 ### Tags
 
 | Source | Image tags | Chart tags | Changes? |

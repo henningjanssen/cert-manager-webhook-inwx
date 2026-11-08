@@ -82,6 +82,12 @@ jobs:
       - name: Test and lint
         run: moon run "$TOOL:test" "$TOOL:lint"
 
+      # Before the first push, because a failed release uses up its version.
+      - name: Generate release notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: bash scripts/release-notes.sh "$TAG" > "$RUNNER_TEMP/notes.md"
+
       - name: Publish image
         id: image
         env:
@@ -155,7 +161,7 @@ jobs:
           cp "$IMAGE_SBOM" "$image_sbom"
           cp "$CHART_SBOM" "$chart_sbom"
 
-          cat > "$RUNNER_TEMP/notes.md" <<NOTES
+          cat >> "$RUNNER_TEMP/notes.md" <<NOTES
           ## Artifacts
 
           - Image: \`$IMAGE_REPO:$VERSION\`
