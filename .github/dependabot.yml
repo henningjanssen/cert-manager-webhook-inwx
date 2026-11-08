@@ -1,38 +1,46 @@
 version: 2
 
 updates:
-  # Go modules — mirrors renovate "Go dependencies" group
+  # Go modules — one go.mod per tool under tools/.
   - package-ecosystem: gomod
-    directory: /
+    directories:
+      - '/tools/*'
     schedule:
       interval: daily
+    cooldown:
+      default-days: 1
     labels:
       - dependencies
     groups:
       go-dependencies:
         patterns:
-          - "*"
+          - '*'
 
-  # Dockerfile base images — mirrors renovate "Docker base images" group
+  # Dockerfile base images.
   - package-ecosystem: docker
-    directory: /
+    directories:
+      - '/tools/*'
     schedule:
       interval: daily
+    cooldown:
+      default-days: 1
     labels:
       - dependencies
     groups:
       docker-base-images:
         patterns:
-          - "*"
+          - '*'
 
-  # GitHub Actions — mirrors renovate "GitHub Actions" group
+  # GitHub Actions used by the shared workflows.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: daily
+    cooldown:
+      default-days: 1
     labels:
       - dependencies
     groups:
       github-actions:
         patterns:
-          - "*"
+          - '*'

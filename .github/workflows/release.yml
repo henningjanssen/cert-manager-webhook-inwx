@@ -1,114 +1,180 @@
 name: Release
 
+# Releases one tool. Image and chart share the version in the tag:
+#   git tag <tool>@1.2.3 && git push origin <tool>@1.2.3
+# Prereleases: <tool>@1.2.3-alpha.1, -beta.1, -rc.1
 on:
-  release:
-    types: [created]
-
-permissions:
-  contents: write
-  packages: write
-  id-token: write       # required for OIDC provenance attestation
-  attestations: write   # required for build provenance
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  push:
+    tags:
+      - '*@*'
 
 jobs:
-  docker:
-    name: Build and push Docker image
+  # Expressions can't split a string, so the tool for the per-tool concurrency
+  # group has to come from an earlier job.
+  validate:
+    name: Validate tag
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
-      image-digest: ${{ steps.build.outputs.digest }}
+      tool: ${{ steps.tag.outputs.tool }}
+      version: ${{ steps.tag.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate tag
+        id: tag
+        env:
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tool="${TAG%@*}"
+          version="${TAG##*@}"
+          n='(0|[1-9][0-9]*)'
+          semver="^$n\.$n\.$n(-(alpha|beta|rc)\.$n)?$"
+          fail() { echo "::error::$1"; exit 1; }
+          [[ "$tool" =~ ^[a-z0-9][a-z0-9-]*$ ]] || fail "invalid tool name in tag: $TAG"
+          [[ "$version" =~ $semver ]] || fail "not x.y.z or x.y.z-(alpha|beta|rc).N: $version"
+          [ -f "tools/$tool/moon.yml" ] || fail "no such tool: tools/$tool"
+          # A release always ships both artifacts.
+          [ -f "tools/$tool/Dockerfile" ] && [ -d "tools/$tool/chart" ] \
+            || fail "tools/$tool needs a Dockerfile and a chart/ to be released"
+          if gh release view "$TAG" >/dev/null 2>&1; then fail "release $TAG already exists"; fi
+          echo "tool=$tool" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: Release ${{ github.ref_name }}
+    needs: validate
+    runs-on: ubuntu-latest
+    # Per tool, so two releases can't race for x.y, x and latest.
+    concurrency:
+      group: release-${{ needs.validate.outputs.tool }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      TOOL: ${{ needs.validate.outputs.tool }}
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install tools via mise
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          # Part of the build's inputs, so pinned for reproducibility.
+          driver-opts: image=moby/buildkit:v0.34.2@sha256:c5f8862f52499773af85bc07695b2379ef08e8002352b0df2c4864c91d78dabe
 
-      - name: Extract image metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+      - name: Test and lint
+        run: moon run "$TOOL:test" "$TOOL:lint"
 
-      - name: Build and push
-        id: build
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Publish image
+        id: image
+        env:
+          REGISTRY_USERNAME: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: moon exec --ignore-ci-checks "$TOOL:publish-image"
 
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@v4
+      - name: Publish chart
+        id: chart
+        env:
+          REGISTRY_USERNAME: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: moon exec --ignore-ci-checks "$TOOL:publish-chart"
+
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-name: ghcr.io/${{ github.repository }}
-          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-name: ${{ steps.image.outputs.image-repo }}
+          subject-digest: ${{ steps.image.outputs.image-digest }}
           push-to-registry: true
 
-  helm:
-    name: Package and publish Helm chart
-    runs-on: ubuntu-latest
-    needs: [docker]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - name: Attest image SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ steps.image.outputs.image-repo }}
+          subject-digest: ${{ steps.image.outputs.image-digest }}
+          sbom-path: ${{ steps.image.outputs.image-sbom }}
+          push-to-registry: true
 
-      - name: Install Helm
-        uses: azure/setup-helm@v5
+      - name: Attest chart provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.chart.outputs.chart-repo }}
+          subject-digest: ${{ steps.chart.outputs.chart-digest }}
+          push-to-registry: true
 
-      - name: Strip leading v from tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Attest chart SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ steps.chart.outputs.chart-repo }}
+          subject-digest: ${{ steps.chart.outputs.chart-digest }}
+          sbom-path: ${{ steps.chart.outputs.chart-sbom }}
+          push-to-registry: true
 
-      - name: Lint Helm chart
+      # After attesting, so x.y, x and latest never point at an unattested release.
+      - name: Move moving tags
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.image-digest }}
+          CHART_DIGEST: ${{ steps.chart.outputs.chart-digest }}
+          REGISTRY_USERNAME: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: moon exec --ignore-ci-checks "$TOOL:publish-aliases"
+
+      # Immutable releases lock assets on publish, so everything is attached to
+      # the draft first and publishing is the last step.
+      - name: Publish immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          IMAGE_REPO: ${{ steps.image.outputs.image-repo }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.image-digest }}
+          IMAGE_SBOM: ${{ steps.image.outputs.image-sbom }}
+          CHART_REPO: ${{ steps.chart.outputs.chart-repo }}
+          CHART_DIGEST: ${{ steps.chart.outputs.chart-digest }}
+          CHART_TGZ: ${{ steps.chart.outputs.chart-tgz }}
+          CHART_SBOM: ${{ steps.chart.outputs.chart-sbom }}
         run: |
-          helm lint chart/
-          helm template cert-manager-webhook-inwx chart/ > /dev/null
+          image_sbom="$RUNNER_TEMP/$TOOL-$VERSION-image.spdx.json"
+          chart_sbom="$RUNNER_TEMP/$TOOL-$VERSION-chart.spdx.json"
+          cp "$IMAGE_SBOM" "$image_sbom"
+          cp "$CHART_SBOM" "$chart_sbom"
 
-      - name: Package Helm chart
-        run: |
-          helm package chart/ \
-            --version "${{ steps.version.outputs.version }}" \
-            --app-version "${{ steps.version.outputs.version }}"
+          cat > "$RUNNER_TEMP/notes.md" <<NOTES
+          ## Artifacts
 
-      - name: Log in to GitHub Container Registry (OCI Helm)
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | \
-            helm registry login ghcr.io \
-              --username "${{ github.actor }}" \
-              --password-stdin
+          - Image: \`$IMAGE_REPO:$VERSION\`
+            - Digest: \`$IMAGE_DIGEST\`
+          - Chart: \`oci://$CHART_REPO:$VERSION\`
+            - Digest: \`$CHART_DIGEST\`
 
-      - name: Push Helm chart to OCI registry
-        run: |
-          helm push \
-            "cert-manager-webhook-inwx-${{ steps.version.outputs.version }}.tgz" \
-            "oci://ghcr.io/${{ github.repository_owner }}/charts"
+          ## Verify
 
-      - name: Print OCI installation hint
-        run: |
-          echo "Chart published:"
-          echo "  oci://ghcr.io/${{ github.repository_owner }}/charts/cert-manager-webhook-inwx:${{ steps.version.outputs.version }}"
-          echo ""
-          echo "Docker image digest: ${{ needs.docker.outputs.image-digest }}"
-          echo ""
-          echo "Pin the image digest in values.yaml to make deployments fully reproducible:"
-          echo "  image:"
-          echo "    digest: ${{ needs.docker.outputs.image-digest }}"
+          \`\`\`bash
+          gh attestation verify oci://$IMAGE_REPO@$IMAGE_DIGEST --repo $GITHUB_REPOSITORY
+          gh attestation verify oci://$CHART_REPO@$CHART_DIGEST --repo $GITHUB_REPOSITORY
+          \`\`\`
+          NOTES
 
+          prerelease=()
+          [[ "$VERSION" == *-* ]] && prerelease=(--prerelease)
+
+          gh release create "$TAG" "$CHART_TGZ" "$image_sbom" "$chart_sbom" \
+            --draft --verify-tag --latest=false "${prerelease[@]}" \
+            --title "$TOOL $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+          gh release edit "$TAG" --draft=false --latest=false

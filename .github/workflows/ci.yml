@@ -2,11 +2,8 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main, dev]
   pull_request:
-  release:
-    types: [created]
 
 permissions:
   contents: read
@@ -16,66 +13,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Test
+  ci:
+    name: Affected tools
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          go-version-file: go.mod
-          cache: true
+          # moon diffs against the base to decide what is affected.
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Download dependencies
-        run: go mod download
+      - name: Install tools via mise
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
 
-      - name: Verify go.sum is up to date
-        run: |
-          go mod tidy
-          git diff --exit-code go.mod go.sum
-
-      - name: Run tests
-        run: go test -v -race -count=1 -coverprofile=coverage.out ./src/...
-
-      - name: Run govulncheck
-        continue-on-error: true
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./src/...
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v7
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
-          name: coverage-report
-          path: coverage.out
+          driver-opts: image=moby/buildkit:v0.34.2@sha256:c5f8862f52499773af85bc07695b2379ef08e8002352b0df2c4864c91d78dabe
+
+      - name: Pipeline self-checks
+        run: bash scripts/test-aliases.sh && bash scripts/test-cleanup.sh
+
+      # Runs every runInCI task for the affected tools. Nothing is published.
+      - name: moon ci
+        run: moon ci
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage
+          path: '**/coverage.out'
           retention-days: 7
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Verify Dockerfile Go version matches go.mod
-        run: |
-          GOMOD_VERSION=$(grep '^go ' go.mod | awk '{print $2}' | cut -d. -f1,2)
-          DOCKERFILE_VERSION=$(grep 'FROM golang:' Dockerfile | head -1 | sed 's/FROM golang:\([0-9.]*\).*/\1/')
-          if [ "$GOMOD_VERSION" != "$DOCKERFILE_VERSION" ]; then
-            echo "Go version mismatch: go.mod=$GOMOD_VERSION Dockerfile=$DOCKERFILE_VERSION"
-            exit 1
-          fi
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9.3.0
-        with:
-          args: --timeout=5m ./src/...
+          if-no-files-found: ignore

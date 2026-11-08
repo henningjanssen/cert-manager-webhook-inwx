@@ -1,5 +1,7 @@
 name: PR Preview
 
+# Publishes pr-<n> images and 0.0.0-pr<n> charts for the tools a PR changes.
+# pr-cleanup.yml removes them when the PR closes.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -9,92 +11,39 @@ permissions:
   packages: write
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: pr-${{ github.event.number }}
   cancel-in-progress: true
 
 jobs:
   preview:
-    name: Build and push PR preview artifacts
+    name: Publish changed tools
     runs-on: ubuntu-latest
-    # Skip for fork PRs — GITHUB_TOKEN has no write access to packages on forks.
+    # Fork PRs can't write packages with GITHUB_TOKEN.
     if: github.event.pull_request.head.repo.full_name == github.repository
-    env:
-      PR_TAG: pr-${{ github.event.number }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install tools via mise
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          # Part of the build's inputs, so pinned for reproducibility.
+          driver-opts: image=moby/buildkit:v0.34.2@sha256:c5f8862f52499773af85bc07695b2379ef08e8002352b0df2c4864c91d78dabe
 
-      - name: Extract image metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=raw,value=pr-${{ github.event.number }}
-            type=raw,value=pr-${{ github.event.number }}-${{ github.sha }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Install Helm
-        uses: azure/setup-helm@v5
-
-      - name: Set PR chart version
-        id: version
+      - name: Publish affected tools
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+          BASE_REF: ${{ github.base_ref }}
+          REGISTRY_USERNAME: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          SHORT_SHA="${GITHUB_SHA::7}"
-          echo "version=0.0.0-pr${{ github.event.number }}+${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "chart_name=cert-manager-webhook-inwx-0.0.0-pr${{ github.event.number }}+${SHORT_SHA}.tgz" >> "$GITHUB_OUTPUT"
-
-      - name: Package Helm chart
-        run: |
-          helm package chart/ \
-            --version "${{ steps.version.outputs.version }}" \
-            --app-version "pr-${{ github.event.number }}-${{ github.sha }}"
-
-      - name: Log in to GitHub Container Registry (OCI Helm)
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | \
-            helm registry login ghcr.io \
-              --username "${{ github.actor }}" \
-              --password-stdin
-
-      - name: Push Helm chart to OCI registry
-        run: |
-          helm push \
-            "${{ steps.version.outputs.chart_name }}" \
-            "oci://ghcr.io/${{ github.repository_owner }}/charts"
-
-      - name: Post artifact summary
-        run: |
-          echo "### PR Preview Artifacts" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Docker image**" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "ghcr.io/${{ github.repository }}:pr-${{ github.event.number }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "ghcr.io/${{ github.repository }}:pr-${{ github.event.number }}-${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Helm chart (OCI)**" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "oci://ghcr.io/${{ github.repository_owner }}/charts/cert-manager-webhook-inwx:${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "> Artifacts will be automatically deleted when this PR is merged or closed." >> "$GITHUB_STEP_SUMMARY"
+          moon exec --ignore-ci-checks --affected \
+            --base "$(git merge-base "origin/$BASE_REF" HEAD)" --head HEAD \
+            :publish-image :publish-chart
