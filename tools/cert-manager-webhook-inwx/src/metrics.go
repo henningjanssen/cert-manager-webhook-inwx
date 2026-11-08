@@ -66,13 +66,6 @@ func (m *solverMetrics) record(op string, err error, d time.Duration) {
 	m.operationDuration.WithLabelValues(op, outcome).Observe(d.Seconds())
 }
 
-// defaultRegisterer returns prometheus.DefaultRegisterer.
-// It exists as an indirection so tests can verify wiring without relying on
-// global state.
-func defaultRegisterer() prometheus.Registerer {
-	return prometheus.DefaultRegisterer
-}
-
 // startMetricsServer starts an HTTP server on addr exposing /metrics and
 // /healthz. The call is non-blocking; the server runs until the process exits.
 func startMetricsServer(addr string) {

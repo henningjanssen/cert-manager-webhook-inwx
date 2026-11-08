@@ -34,7 +34,21 @@ kubectl create secret generic inwx-credentials \
   --from-literal=password=<YOUR_INWX_PASSWORD>
 ```
 
-The secret must exist in the same namespace as your `Issuer`, or in the cert-manager namespace for `ClusterIssuer`.
+The secret must be in the cert-manager namespace for a `ClusterIssuer`. For an `Issuer` it must be in the `Issuer`'s namespace, and that namespace must be listed in the `credentialNamespaces` Helm value unless it is the release namespace.
+
+#### Accounts with two-factor authentication
+
+If the INWX account uses 2FA, add its base32 TOTP secret (the text form of the setup QR code) to the secret:
+
+```bash
+kubectl create secret generic inwx-credentials \
+  --namespace cert-manager \
+  --from-literal=username=<YOUR_INWX_USERNAME> \
+  --from-literal=password=<YOUR_INWX_PASSWORD> \
+  --from-literal=totpSecret=<YOUR_BASE32_TOTP_SECRET>
+```
+
+INWX accepts each code only once, so the webhook does at most one 2FA login per 30 seconds and asks cert-manager to retry when more are waiting. Issuing many certificates at once is slower on such an account, and replicas may collide and retry.
 
 ### 2. Create a ClusterIssuer referencing the webhook
 
@@ -56,9 +70,10 @@ spec:
             solverName: inwx
             config:
               secretName: inwx-credentials
-              # Optional: override secret keys (defaults: "username", "password")
+              # Optional: override secret keys (defaults: "username", "password", "totpSecret")
               # usernameKey: user
               # passwordKey: pass
+              # totpSecretKey: totp
 ```
 
 ### 3. Issue a certificate
@@ -109,6 +124,7 @@ spec:
 
 | Key | Default | Description |
 |-----|---------|-------------|
+| `pki.caDuration` | `43800h` | Self-signed CA lifetime; keep it well above `pki.duration` |
 | `pki.duration` | `8760h` | Webhook TLS certificate lifetime |
 | `pki.renewBefore` | `720h` | Renewal window before expiry |
 | `pki.algorithm` | `ECDSA` | Key algorithm (`ECDSA` or `RSA`) |
@@ -130,12 +146,10 @@ spec:
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `metrics.enabled` | `false` | Expose `/metrics` and `/healthz` on a dedicated HTTP port |
-| `metrics.port` | `8080` | Metrics server port |
 | `metrics.serviceMonitor.enabled` | `false` | Create a Prometheus Operator `ServiceMonitor` |
 | `metrics.podMonitor.enabled` | `false` | Create a Prometheus Operator `PodMonitor` |
 | `otel.enabled` | `false` | Inject `OTEL_EXPORTER_OTLP_ENDPOINT` into the container |
-| `otel.endpoint` | `""` | OTLP/gRPC collector endpoint, e.g. `otel-collector.monitoring.svc:4317` |
+| `otel.endpoint` | `""` | OTLP/gRPC collector URL, e.g. `http://otel-collector.monitoring.svc:4317` (`https://` for TLS) |
 | `otel.serviceName` | `""` | Value for `OTEL_SERVICE_NAME` (defaults to chart fullname) |
 
 ### Networking
@@ -145,20 +159,13 @@ spec:
 | `service.type` | `ClusterIP` | Service type |
 | `service.port` | `443` | Service port |
 | `networkPolicy.enabled` | `false` | Create a `NetworkPolicy` restricting ingress/egress |
-| `ingress.enabled` | `false` | Create a Kubernetes `Ingress` for the metrics endpoint |
-| `ingress.className` | `""` | `ingressClassName` |
-| `ingress.annotations` | `{}` | Ingress annotations |
-| `ingress.hosts` | see values | Host rules (default path: `/metrics`) |
-| `ingress.tls` | `[]` | TLS configuration |
-| `httpRoute.enabled` | `false` | Create a Gateway API `HTTPRoute` for the metrics endpoint |
-| `httpRoute.parentRefs` | `[]` | Gateway references (required when `httpRoute.enabled: true`) |
-| `httpRoute.hostnames` | `[]` | Hostnames to match |
+| `networkPolicy.extraEgress` | `[]` | Extra egress rules; add the API server port if it is not 443 (often 6443) and the OTLP port for tracing |
 
 ### Probes
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `startupProbe` | see values | Probe checked until first success; gives the webhook up to 60 s to start before liveness kicks in |
+| `startupProbe` | see values | Probe checked until first success; gives the webhook up to 120 s to start before liveness kicks in |
 | `livenessProbe` | see values | Active after startup probe succeeds |
 | `readinessProbe` | see values | Active after startup probe succeeds |
 
@@ -176,6 +183,8 @@ spec:
 
 | Key | Default | Description |
 |-----|---------|-------------|
+| `credentialNamespaces` | `[]` | Extra namespaces whose credential secrets the webhook may read (for an `Issuer` elsewhere) |
+| `credentialSecretNames` | `[]` | Restrict the webhook to these credential secret names; empty allows every secret in those namespaces |
 | `extraEnv` | `[]` | Extra environment variables |
 | `extraVolumes` | `[]` | Extra volumes |
 | `extraVolumeMounts` | `[]` | Extra volume mounts |
@@ -193,7 +202,7 @@ spec:
 2. Describe the failing `CertificateRequest`: `kubectl describe certificaterequest -n <namespace> <name>`
 3. Verify the secret exists and contains the right keys:
    ```bash
-   kubectl get secret inwx-credentials -n cert-manager -o jsonpath='{.data}' | base64 -d
+   kubectl get secret inwx-credentials -n cert-manager -o jsonpath='{.data.username}' | base64 -d
    ```
 
 ### "secret not found" error
@@ -216,6 +225,8 @@ kubectl describe apiservice v1alpha1.acme.inwx.com
 ## Development
 
 Tasks and the release process are in the [root README](../../README.md).
+
+To test against the real INWX sandbox, set `INWX_SANDBOX_USERNAME`, `INWX_SANDBOX_PASSWORD`, `INWX_SANDBOX_ZONE` (and `INWX_SANDBOX_TOTP_SECRET` for 2FA), then run `go test -run TestInwxSandbox ./src/`. It is skipped otherwise.
 
 ## License
 

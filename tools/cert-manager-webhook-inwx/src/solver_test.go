@@ -20,7 +20,11 @@ import (
 // fakeInwxClient is a controllable test double for inwxClient.
 type fakeInwxClient struct {
 	loginErr    error
+	needsTOTP   bool
 	logoutCalls int
+
+	unlockCalls []string
+	unlockErr   error
 
 	createCalls []*goinwx.NameserverRecordRequest
 	createErr   error
@@ -32,8 +36,12 @@ type fakeInwxClient struct {
 	deleteErr   error
 }
 
-func (f *fakeInwxClient) Login() error  { return f.loginErr }
-func (f *fakeInwxClient) Logout() error { f.logoutCalls++; return nil }
+func (f *fakeInwxClient) Login() (bool, error) { return f.needsTOTP, f.loginErr }
+func (f *fakeInwxClient) Logout() error        { f.logoutCalls++; return nil }
+func (f *fakeInwxClient) Unlock(tan string) error {
+	f.unlockCalls = append(f.unlockCalls, tan)
+	return f.unlockErr
+}
 
 func (f *fakeInwxClient) CreateRecord(req *goinwx.NameserverRecordRequest) (string, error) {
 	f.createCalls = append(f.createCalls, req)
@@ -245,6 +253,84 @@ func TestPresent_CreateRecordFails(t *testing.T) {
 
 	if err := s.Present(ch); err == nil {
 		t.Fatal("expected error on CreateRecord failure, got nil")
+	}
+}
+
+func TestPresent_ExistingRecordIsSuccess(t *testing.T) {
+	fc := &fakeInwxClient{createErr: &goinwx.ErrorResponse{Code: inwxCodeObjectExists, Message: "Object exists"}}
+	s := buildSolver(fc, testSecret("inwx-credentials", "default"))
+	ch := testChallenge("default", "_acme-challenge.example.com.", "example.com.", "token")
+
+	if err := s.Present(ch); err != nil {
+		t.Fatalf("Present() must tolerate an existing record: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Two-factor authentication
+// ---------------------------------------------------------------------------
+
+func totpTestSecret() *corev1.Secret {
+	secret := testSecret("inwx-credentials", "default")
+	secret.Data[defaultTOTPSecretKey] = []byte("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ")
+	return secret
+}
+
+func TestPresent_UnlocksAccountWithTOTP(t *testing.T) {
+	fc := &fakeInwxClient{needsTOTP: true}
+	s := buildSolver(fc, totpTestSecret())
+	ch := testChallenge("default", "_acme-challenge.example.com.", "example.com.", "token")
+
+	if err := s.Present(ch); err != nil {
+		t.Fatalf("Present() unexpected error: %v", err)
+	}
+	if len(fc.unlockCalls) != 1 || len(fc.unlockCalls[0]) != 6 {
+		t.Fatalf("expected one six-digit Unlock call, got %q", fc.unlockCalls)
+	}
+	if len(fc.createCalls) != 1 {
+		t.Fatalf("expected 1 CreateRecord call, got %d", len(fc.createCalls))
+	}
+}
+
+func TestPresent_NoUnlockWithoutTOTPRequirement(t *testing.T) {
+	fc := &fakeInwxClient{}
+	s := buildSolver(fc, totpTestSecret())
+	ch := testChallenge("default", "_acme-challenge.example.com.", "example.com.", "token")
+
+	if err := s.Present(ch); err != nil {
+		t.Fatalf("Present() unexpected error: %v", err)
+	}
+	if len(fc.unlockCalls) != 0 {
+		t.Fatalf("expected no Unlock call, got %q", fc.unlockCalls)
+	}
+}
+
+func TestPresent_TOTPRequiredButNoSecret(t *testing.T) {
+	fc := &fakeInwxClient{needsTOTP: true}
+	s := buildSolver(fc, testSecret("inwx-credentials", "default"))
+	ch := testChallenge("default", "_acme-challenge.example.com.", "example.com.", "token")
+
+	if err := s.Present(ch); err == nil {
+		t.Fatal("expected error when the account needs TOTP and no secret is set")
+	}
+	if len(fc.createCalls) != 0 {
+		t.Fatal("must not create a record on a locked session")
+	}
+	if fc.logoutCalls != 1 {
+		t.Errorf("expected Logout called once, got %d times", fc.logoutCalls)
+	}
+}
+
+func TestPresent_UnlockFails(t *testing.T) {
+	fc := &fakeInwxClient{needsTOTP: true, unlockErr: errors.New("bad tan")}
+	s := buildSolver(fc, totpTestSecret())
+	ch := testChallenge("default", "_acme-challenge.example.com.", "example.com.", "token")
+
+	if err := s.Present(ch); err == nil {
+		t.Fatal("expected error when Unlock fails")
+	}
+	if len(fc.createCalls) != 0 {
+		t.Fatal("must not create a record on a locked session")
 	}
 }
 

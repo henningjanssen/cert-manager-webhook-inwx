@@ -20,9 +20,11 @@ const instrumentationName = "github.com/henningjanssen/cert-manager-webhook-inwx
 //
 // When endpoint is empty, no provider is installed and the default no-op
 // implementation remains in effect — spans are silently discarded.
-// When endpoint is set (e.g. "localhost:4317"), an OTLP/gRPC exporter is
-// created and the global provider is updated. Standard OTel environment
-// variables (OTEL_SERVICE_NAME, OTEL_RESOURCE_ATTRIBUTES, etc.) are honoured.
+// When endpoint is set, an OTLP/gRPC exporter is created and the global
+// provider is updated. The exporter reads OTEL_EXPORTER_OTLP_ENDPOINT itself,
+// which must be a URL: its scheme picks plain text (http) or TLS (https).
+// Standard OTel environment variables (OTEL_SERVICE_NAME,
+// OTEL_RESOURCE_ATTRIBUTES, etc.) are honoured.
 //
 // The returned shutdown function must be called before program exit to flush
 // pending spans and free resources.
@@ -31,7 +33,7 @@ func initTracer(ctx context.Context, endpoint string) (func(context.Context) err
 		return func(_ context.Context) error { return nil }, nil
 	}
 
-	exporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint(endpoint))
+	exporter, err := otlptracegrpc.New(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OTLP/gRPC trace exporter: %w", err)
 	}
