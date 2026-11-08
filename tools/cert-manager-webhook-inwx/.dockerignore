@@ -1,0 +1,8 @@
+# Docker build context is this project directory (tools/cert-manager-webhook-inwx/).
+chart/
+bin/
+dist/
+*.md
+*.yaml
+*.out
+.docker-metadata.json

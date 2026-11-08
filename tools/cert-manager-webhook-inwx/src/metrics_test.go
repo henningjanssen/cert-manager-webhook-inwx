@@ -179,4 +179,3 @@ func TestNewSolverMetrics_IndependentRegistriesDoNotConflict(t *testing.T) {
 	_ = newSolverMetrics(reg1)
 	_ = newSolverMetrics(reg2)
 }
-

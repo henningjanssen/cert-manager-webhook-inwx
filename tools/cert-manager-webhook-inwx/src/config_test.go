@@ -6,7 +6,6 @@ import (
 	extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
-
 func TestLoadConfig_Nil(t *testing.T) {
 	cfg, err := loadConfig(nil)
 	if err != nil {

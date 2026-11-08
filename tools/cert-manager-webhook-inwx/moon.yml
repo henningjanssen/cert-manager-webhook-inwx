@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://moonrepo.dev/schemas/project.json
+#
+# cert-manager ACME DNS01 webhook solver for INWX.
+
+id: 'cert-manager-webhook-inwx'
+layer: 'application'
+language: 'go'
+
+project:
+  name: 'cert-manager-webhook-inwx'
+  description: 'cert-manager ACME DNS01 webhook solver for INWX'
+  channel: '#cert-manager'
+  owner: 'henningjanssen'
+
+# Opts this project into the shared docker + helm pipelines.
+tags:
+  - 'docker'
+  - 'helm'
