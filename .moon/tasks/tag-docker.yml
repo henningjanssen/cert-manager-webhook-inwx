@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://moonrepo.dev/schemas/tasks.json
+#
+# Applied to any project with `tags: [docker]`. All real work is in
+# scripts/docker.sh. Override IMAGE_NAME / IMAGE_REPO / IMAGE_PLATFORMS in the
+# project's moon.yml `env:`.
+
+tasks:
+  # Writes an OCI archive to dist/ (load it with `docker load -i`).
+  build-image:
+    command: 'bash $workspaceRoot/scripts/docker.sh build'
+    inputs:
+      - '@group(sources)'
+      - '@group(dockerfile)'
+      - '/scripts/**/*'
+      - '/mise.toml'
+    options: { cache: false }
+
+  # Needs RELEASE_VERSION, PR_NUMBER or BRANCH_TAG. Never run by `moon ci`; CI
+  # uses `moon exec --ignore-ci-checks`. Inputs include the chart so a tool's
+  # image and chart are always published together.
+  publish-image:
+    command: 'bash $workspaceRoot/scripts/docker.sh publish'
+    inputs:
+      - '@group(sources)'
+      - '@group(dockerfile)'
+      - '@group(chart)'
+      - '/scripts/**/*'
+      - '/mise.toml'
+    options: { cache: false, runInCI: false }
+
+  # Moves x.y, x and latest. release.yml runs it after attesting.
+  publish-aliases:
+    command: 'bash $workspaceRoot/scripts/aliases.sh'
+    options: { cache: false, runInCI: false }

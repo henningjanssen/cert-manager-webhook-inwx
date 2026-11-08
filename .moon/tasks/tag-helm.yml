@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://moonrepo.dev/schemas/tasks.json
+#
+# Applied to any project with `tags: [helm]`. All real work is in scripts/helm.sh.
+
+tasks:
+  lint-chart:
+    command: 'bash $workspaceRoot/scripts/helm.sh lint'
+    inputs:
+      - '@group(chart)'
+      - '/scripts/**/*'
+      - '/mise.toml'
+
+  # Adds `helm lint` to the language's own `lint` task.
+  lint:
+    deps: ['~:lint-chart']
+
+  # Writes a deterministic .tgz to dist/.
+  build-chart:
+    command: 'bash $workspaceRoot/scripts/helm.sh package'
+    inputs:
+      - '@group(chart)'
+      - '/scripts/**/*'
+      - '/mise.toml'
+    options: { cache: false }
+
+  # Needs RELEASE_VERSION, PR_NUMBER or BRANCH_TAG. Never run by `moon ci`; CI
+  # uses `moon exec --ignore-ci-checks`. Inputs include the sources so a tool's
+  # image and chart are always published together.
+  publish-chart:
+    command: 'bash $workspaceRoot/scripts/helm.sh publish'
+    inputs:
+      - '@group(sources)'
+      - '@group(dockerfile)'
+      - '@group(chart)'
+      - '/scripts/**/*'
+      - '/mise.toml'
+    options: { cache: false, runInCI: false }

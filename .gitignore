@@ -5,3 +5,14 @@
 *.out
 docker/certs/
 bin/
+
+# moon
+.moon/cache/
+.moon/docker/
+
+# mise — local, per-developer overrides
+mise.local.toml
+.mise.local.toml
+
+# build/publish artifacts produced by scripts/
+dist/

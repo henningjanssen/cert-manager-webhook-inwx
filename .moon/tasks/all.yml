@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://moonrepo.dev/schemas/tasks.json
+#
+# Inherited by EVERY project. Language-specific tasks live in
+# <language>.yml; image/chart tasks live in
+# tag-{docker,helm}.yml and are opted into per project via `tags`.
+
+fileGroups:
+  # What counts as "the code" for cache/affected purposes. Languages refine
+  # this in .moon/tasks/<language>.yml; a project can override it in moon.yml.
+  sources:
+    - 'src/**/*'
+  # Consumed by the tag-helm tasks.
+  chart:
+    - 'chart/**/*'
+  # Consumed by the tag-docker tasks.
+  dockerfile:
+    - 'Dockerfile'
+    - '.dockerignore'

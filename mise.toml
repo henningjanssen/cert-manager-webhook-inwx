@@ -1,0 +1,19 @@
+# Tool versions for this repo, managed by mise (https://mise.jdx.dev).
+# CI installs these via `jdx/mise-action`; locally run `mise install`
+# (or `mise trust && mise install` the first time).
+#
+# This is the ONLY place tools are pinned. moon does not manage any toolchain
+# itself — its tasks use whatever `go` / `helm` / … mise puts on PATH.
+
+[tools]
+# Monorepo orchestrator.
+"aqua:moonrepo/moon" = "2.4.2"
+
+# Language runtimes + infra CLIs shared by the projects and the docker/helm
+# scripts. Keep `go` in sync with each tool's go.mod (the `versions-check`
+# task enforces it against the Dockerfile).
+go = "1.26.0"
+helm = "3.16.4"
+golangci-lint = "2.14.0"
+syft = "1.57.0"
+"aqua:google/go-containerregistry" = "0.22.1"

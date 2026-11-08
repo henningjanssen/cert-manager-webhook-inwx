@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://moonrepo.dev/schemas/workspace.json
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Monorepo of small, unrelated docker + helm based tools that share one
+# build/publish pipeline. One directory per tool under tools/.
+#
+# See docs/adding-a-new-tool.md for how to add a project.
+# ─────────────────────────────────────────────────────────────────────────────
+
+projects:
+  # One directory per tool.
+  - 'tools/*/moon.yml'
+
+vcs:
+  client: git
+  defaultBranch: main
+  provider: github
+
+# Affected-only everything. `moon ci` and `moon run --affected` diff against
+# this base, so a change under tools/foo/ never rebuilds tools/bar/.
+pipeline:
+  installDependencies: false
+
+# Keep hashes stable and small: don't fold the whole toolchain into every hash.
+hasher:
+  optimization: accuracy
+  walkStrategy: vcs

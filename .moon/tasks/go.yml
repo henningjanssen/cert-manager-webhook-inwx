@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=https://moonrepo.dev/schemas/tasks.json
+#
+# Inherited by every project with `language: go`. All tools come from mise.
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+    - 'go.mod'
+    - 'go.sum'
+
+tasks:
+  build:
+    script: "CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags='-w -s -buildid=' -o bin/$MOON_PROJECT_ID ./src/"
+    inputs:
+      - '@group(sources)'
+    outputs:
+      - 'bin/$project'
+
+  test:
+    script: 'go test -race -count=1 -coverprofile=coverage.out ./src/...'
+    inputs:
+      - '@group(sources)'
+    outputs:
+      - 'coverage.out'
+
+  lint:
+    script: 'golangci-lint run --timeout=5m ./src/...'
+    inputs:
+      - '@group(sources)'
+
+  lint-fix:
+    script: 'golangci-lint run --timeout=5m --fix ./src/...'
+    options: { cache: false, runInCI: false }
+
+  format:
+    script: 'golangci-lint fmt --diff ./src/...'
+    inputs:
+      - '@group(sources)'
+
+  format-fix:
+    script: 'golangci-lint fmt ./src/...'
+    options: { cache: false, runInCI: false }
+
+  tidy-check:
+    script: 'go mod tidy && git diff --exit-code go.mod go.sum'
+    inputs:
+      - 'go.mod'
+      - 'go.sum'
+
+  vulncheck:
+    script: 'go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./src/...'
+    inputs:
+      - '@group(sources)'
+    options:
+      allowFailure: true
+
+  # Guards the Go version in the Dockerfile and mise.toml against go.mod.
+  versions-check:
+    command: 'bash $workspaceRoot/scripts/check-go-versions.sh'
+    inputs:
+      - 'go.mod'
+      - 'Dockerfile'
+      - '/mise.toml'
