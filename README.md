@@ -68,6 +68,13 @@ type. Anything marked `type!:` or with a `BREAKING CHANGE:` footer is listed fir
 under **Breaking changes**, so mark breaking commits. Preview with
 `bash scripts/release-notes.sh <tool>@<version>` once the tag exists locally.
 
+A change is breaking if an existing install can fail or behave differently after
+upgrading with unchanged values, so check changes to chart values, validation,
+RBAC and defaults. The footer ends at a blank line and must be in a commit that
+touches `tools/<tool>`. Longer migration steps belong in the tool's README under
+**Upgrading**, with the footer pointing to them. If a pushed commit was not marked,
+don't rewrite it: add a follow-up commit with the footer before the next release.
+
 ### Tags
 
 | Source | Image tags | Chart tags | Changes? |

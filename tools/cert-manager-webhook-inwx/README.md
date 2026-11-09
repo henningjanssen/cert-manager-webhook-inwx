@@ -194,6 +194,14 @@ spec:
 | `serviceAccount.annotations` | `{}` | ServiceAccount annotations |
 | `terminationGracePeriodSeconds` | `30` | Graceful termination period |
 
+## Upgrading
+
+### `otel.endpoint` must be a URL
+
+With `otel.enabled: true`, the chart now refuses to render if `otel.endpoint` has
+no scheme. Change `otel-collector.monitoring.svc:4317` to
+`http://otel-collector.monitoring.svc:4317`, or use `https://` for TLS.
+
 ## Troubleshooting
 
 ### Certificate stuck in pending
