@@ -148,9 +148,20 @@ spec:
 |-----|---------|-------------|
 | `metrics.serviceMonitor.enabled` | `false` | Create a Prometheus Operator `ServiceMonitor` |
 | `metrics.podMonitor.enabled` | `false` | Create a Prometheus Operator `PodMonitor` |
-| `otel.enabled` | `false` | Inject `OTEL_EXPORTER_OTLP_ENDPOINT` into the container |
-| `otel.endpoint` | `""` | OTLP/gRPC collector URL, e.g. `http://otel-collector.monitoring.svc:4317` (`https://` for TLS) |
 | `otel.serviceName` | `""` | Value for `OTEL_SERVICE_NAME` (defaults to chart fullname) |
+| `otel.traces.enabled` | `false` | Export traces via OTLP |
+| `otel.traces.endpoint` | `""` | Collector URL (`https://` for TLS). grpc: `http://otel-collector.monitoring.svc:4317`; http/protobuf: full URL incl. path, `http://otel-collector.monitoring.svc:4318/v1/traces` |
+| `otel.traces.protocol` | `grpc` | `grpc` or `http/protobuf` |
+| `otel.metrics.enabled` | `false` | Export the Prometheus metrics (same as `/metrics`) via OTLP |
+| `otel.metrics.endpoint` | `""` | Collector URL, as for traces (http/protobuf path `/v1/metrics`) |
+| `otel.metrics.protocol` | `grpc` | `grpc` or `http/protobuf` |
+| `otel.logs.enabled` | `false` | Export container log lines via OTLP (still written to stderr) |
+| `otel.logs.endpoint` | `""` | Collector URL, as for traces (http/protobuf path `/v1/logs`) |
+| `otel.logs.protocol` | `grpc` | `grpc` or `http/protobuf` |
+
+Outside the chart, the binary reads the standard variables: a signal is on when
+`OTEL_{TRACES,METRICS,LOGS}_EXPORTER=otlp`, with `OTEL_EXPORTER_OTLP_<SIGNAL>_ENDPOINT`
+and `OTEL_EXPORTER_OTLP_<SIGNAL>_PROTOCOL` per signal.
 
 ### Networking
 
@@ -159,7 +170,7 @@ spec:
 | `service.type` | `ClusterIP` | Service type |
 | `service.port` | `443` | Service port |
 | `networkPolicy.enabled` | `false` | Create a `NetworkPolicy` restricting ingress/egress |
-| `networkPolicy.extraEgress` | `[]` | Extra egress rules; add the API server port if it is not 443 (often 6443) and the OTLP port for tracing |
+| `networkPolicy.extraEgress` | `[]` | Extra egress rules; add the API server port if it is not 443 (often 6443) and the OTLP port(s) for OTel export |
 
 ### Probes
 
@@ -196,9 +207,25 @@ spec:
 
 ## Upgrading
 
-### `otel.endpoint` must be a URL
+### `otel.*` is configured per signal
 
-With `otel.enabled: true`, the chart now refuses to render if `otel.endpoint` has
+`otel.enabled` and `otel.endpoint` were replaced by `otel.traces`, `otel.metrics`
+and `otel.logs`, each with its own `enabled`, `endpoint` and `protocol`; the chart
+refuses to render with the old keys. To keep the previous behaviour:
+
+```yaml
+otel:
+  traces:
+    enabled: true
+    endpoint: http://otel-collector.monitoring.svc:4317
+```
+
+The binary no longer reads `OTEL_EXPORTER_OTLP_ENDPOINT` alone to enable
+tracing; set `OTEL_TRACES_EXPORTER=otlp` as well.
+
+### `otel.<signal>.endpoint` must be a URL
+
+With a signal enabled, the chart refuses to render if its `otel.<signal>.endpoint` has
 no scheme. Change `otel-collector.monitoring.svc:4317` to
 `http://otel-collector.monitoring.svc:4317`, or use `https://` for TLS.
 

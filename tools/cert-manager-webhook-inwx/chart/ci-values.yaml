@@ -16,8 +16,16 @@ metrics:
   podMonitor:
     enabled: true
 otel:
-  enabled: true
-  endpoint: http://otel-collector.monitoring.svc:4317
+  traces:
+    enabled: true
+    endpoint: http://otel-collector.monitoring.svc:4317
+  metrics:
+    enabled: true
+    endpoint: http://otel-collector.monitoring.svc:4318/v1/metrics
+    protocol: http/protobuf
+  logs:
+    enabled: true
+    endpoint: http://otel-collector.monitoring.svc:4317
 credentialNamespaces:
   - apps
 credentialSecretNames:

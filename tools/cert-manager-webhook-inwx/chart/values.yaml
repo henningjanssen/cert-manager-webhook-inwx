@@ -259,21 +259,38 @@ networkPolicy:
   # HTTPS (TCP 443). All other traffic is denied.
   enabled: false
   # -- Additional egress rules. Many CNIs check the API server's real port, so
-  # clusters serving it on 6443 need that here, and tracing needs its OTLP port.
+  # clusters serving it on 6443 need that here, and OTel export needs its OTLP port(s).
   extraEgress: []
   # - ports:
   #     - port: 6443
   #       protocol: TCP
 
-# -- OpenTelemetry tracing configuration.
+# -- OpenTelemetry export. Each signal is enabled separately and has its own
+# collector endpoint and protocol.
 otel:
-  # -- Enable OpenTelemetry tracing by injecting the OTLP endpoint env var into
-  # the container. Has no effect unless an endpoint is also provided.
-  enabled: false
-  # -- OTLP/gRPC collector URL, e.g. "http://otel-collector.monitoring.svc:4317".
-  # The scheme selects plain text (http) or TLS (https).
-  # Activates tracing when non-empty.
-  endpoint: ""
   # -- Value for OTEL_SERVICE_NAME. Defaults to the chart fullname when empty.
   serviceName: ""
+  traces:
+    # -- Export spans of Present/CleanUp and INWX API calls.
+    enabled: false
+    # -- Collector URL; the scheme selects plain text (http) or TLS (https).
+    # grpc: "http://otel-collector.monitoring.svc:4317".
+    # http/protobuf: the full URL incl. path, "http://otel-collector.monitoring.svc:4318/v1/traces".
+    endpoint: ""
+    # -- "grpc" or "http/protobuf".
+    protocol: grpc
+  metrics:
+    # -- Export the Prometheus metrics served on /metrics via OTLP as well.
+    enabled: false
+    # -- Collector URL, see otel.traces.endpoint (http/protobuf path: /v1/metrics).
+    endpoint: ""
+    # -- "grpc" or "http/protobuf".
+    protocol: grpc
+  logs:
+    # -- Export the container's log lines via OTLP (they are still written to stderr).
+    enabled: false
+    # -- Collector URL, see otel.traces.endpoint (http/protobuf path: /v1/logs).
+    endpoint: ""
+    # -- "grpc" or "http/protobuf".
+    protocol: grpc
 

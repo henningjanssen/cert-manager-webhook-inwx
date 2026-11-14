@@ -53,12 +53,29 @@ spec:
           env:
             - name: GROUP_NAME
               value: {{ .Values.groupName | quote }}
-            {{- if and .Values.otel.enabled .Values.otel.endpoint }}
-            {{- if not (contains "://" .Values.otel.endpoint) }}
-            {{- fail "otel.endpoint must be a URL, e.g. http://otel-collector.monitoring.svc:4317" }}
+            {{- if or (hasKey .Values.otel "enabled") (hasKey .Values.otel "endpoint") }}
+            {{- fail "otel.enabled/otel.endpoint were replaced by otel.traces.enabled/otel.traces.endpoint (and otel.metrics.*, otel.logs.*)" }}
             {{- end }}
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: {{ .Values.otel.endpoint | quote }}
+            {{- $otelEnabled := false }}
+            {{- range $signal := list "traces" "metrics" "logs" }}
+            {{- $c := index $.Values.otel $signal }}
+            {{- if $c.enabled }}
+            {{- $otelEnabled = true }}
+            {{- if not (contains "://" (toString $c.endpoint)) }}
+            {{- fail (printf "otel.%s.endpoint must be a URL, e.g. http://otel-collector.monitoring.svc:4317" $signal) }}
+            {{- end }}
+            {{- if not (has $c.protocol (list "grpc" "http/protobuf")) }}
+            {{- fail (printf "otel.%s.protocol must be grpc or http/protobuf" $signal) }}
+            {{- end }}
+            - name: OTEL_{{ upper $signal }}_EXPORTER
+              value: otlp
+            - name: OTEL_EXPORTER_OTLP_{{ upper $signal }}_ENDPOINT
+              value: {{ $c.endpoint | quote }}
+            - name: OTEL_EXPORTER_OTLP_{{ upper $signal }}_PROTOCOL
+              value: {{ $c.protocol | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if $otelEnabled }}
             - name: OTEL_SERVICE_NAME
               value: {{ default (include "cert-manager-webhook-inwx.fullname" .) .Values.otel.serviceName | quote }}
             {{- end }}

@@ -18,12 +18,11 @@ func main() {
 	}
 
 	// ── OpenTelemetry ──────────────────────────────────────────────────────
-	// Reads OTEL_EXPORTER_OTLP_ENDPOINT. When empty, tracing is a no-op.
-	otelShutdown, err := initTracer(context.Background(), os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	// Each signal is enabled via OTEL_{TRACES,METRICS,LOGS}_EXPORTER; unset is a no-op.
+	otelShutdown, err := initTelemetry(context.Background())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not initialise OTel tracer: %v\n", err)
-		// Non-fatal: continue without tracing.
-		otelShutdown = func(_ context.Context) error { return nil }
+		// Non-fatal: continue with whatever signals did initialise.
+		fmt.Fprintf(os.Stderr, "warning: could not initialise OTel: %v\n", err)
 	}
 	defer otelShutdown(context.Background()) //nolint:errcheck
 
